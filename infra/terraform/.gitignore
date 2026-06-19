@@ -1,0 +1,16 @@
+# Local Terraform state & provider cache — never commit.
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Variable files may contain secrets / per-env values.
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# .terraform.lock.hcl IS committed deliberately (pinned provider hashes).
