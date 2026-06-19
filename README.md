@@ -21,6 +21,7 @@ instances on Hetzner Cloud, each running a pre-baked OpenClaw agent.
 
 1. **Bake** — run `dotfiles/bootstrap.sh` on one fresh Hetzner VPS → snapshot it.
    The snapshot is the golden image. Byte-identical clones, not re-runs.
+   (Pinned: openclaw `2026.6.5` — Cedric's verified build.)
 2. **Clone** — spin 14 servers from the snapshot. Per-instance cloud-init sets the
    hostname (the Pokémon name) and injects that box's API key.
 3. **Reset** — `infra/reset.sh` restores any wedged instance to clean state.

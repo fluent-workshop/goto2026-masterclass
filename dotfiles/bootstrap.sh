@@ -14,7 +14,7 @@
 set -euo pipefail
 
 # ---- Pin everything. A masterclass image must be reproducible. -------------
-OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.6.18}"   # pinned; bump deliberately
+OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.6.5}"    # pinned to Cedric's known-good build; bump deliberately
 NODE_VERSION="${NODE_VERSION:-22}"                   # LTS
 AGENT_USER="${AGENT_USER:-student}"
 
