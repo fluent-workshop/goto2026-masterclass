@@ -1,0 +1,25 @@
+#cloud-config
+# Per-instance cloud-init template for GOTO 2026 student VPS.
+# Placeholders {{HOSTNAME}} and {{OPENCLAW_API_KEY}} are substituted by
+# infra/clone.sh at create time, per row in instances.txt.
+#
+# This is the ONLY per-instance layer. Everything else comes from the
+# golden snapshot, so each box differs only by name + its injected key.
+
+hostname: {{HOSTNAME}}
+preserve_hostname: false
+
+write_files:
+  # Per-instance OpenClaw API key, root-readable only, owned by the agent user.
+  - path: /home/student/.openclaw/credentials/api-key
+    owner: student:student
+    permissions: '0600'
+    content: |
+      {{OPENCLAW_API_KEY}}
+
+runcmd:
+  # Make the hostname stick for prompts/support ("Pikachu is wedged")
+  - hostnamectl set-hostname {{HOSTNAME}}
+  - sed -i "s/127.0.1.1.*/127.0.1.1 {{HOSTNAME}}/" /etc/hosts || true
+  # Sanity self-check on first boot; logs to /var/log/cloud-init-output.log
+  - sudo -u student openclaw doctor || true

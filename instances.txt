@@ -1,0 +1,18 @@
+# Canonical instance roster — GOTO 2026 masterclass
+# Single source of truth. Hostname = the name on each line.
+# 14 total = 10 registered + 4 buffer (walk-ins / hot-swap).
+# Names chosen for: unambiguous spelling, no negative connotations, Gen 1.
+abra
+ditto
+dragonite
+gengar
+jolteon
+lapras
+machamp
+meowth
+onix
+pikachu
+rapidash
+squirtle
+vaporeon
+vulpix

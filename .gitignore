@@ -1,0 +1,11 @@
+# Never commit secrets or generated artifacts
+*.key
+*.pem
+*.env
+.env*
+secrets/
+keys/
+*.local
+.DS_Store
+# Generated per-instance cloud-init (contains injected keys)
+infra/cloud-init/generated/
