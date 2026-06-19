@@ -350,7 +350,7 @@ Then the agent's working dirs / config reset to the golden baseline
 
 | # | Question | Owner | Due | Status |
 |---|----------|-------|-----|--------|
-| Q1 | Final server_type — stay x86 `cpx21`, or confirm ARM `cax11` after a smoke test? | Cedric | 2026-06-20 | Open |
+| Q1 | Final server_type — stay x86 `cpx21`, or confirm ARM `cax11` after a smoke test? | Cedric | 2026-06-20 | **Resolved:** Stay x86 `cpx21` to avoid ARM risk on the pinned openclaw build (Cedric, 2026-06-19). |
 | Q2 | Tailnet onboarding — pre-auth key baked into the snapshot, or injected per-clone via cloud-init? | Evie | 2026-06-20 | Open |
 | Q3 | Reset granularity — reset agent state only, or also clear shell history / scratch? | Cedric | 2026-06-20 | Open |
 | Q4 | Per-instance OpenClaw keys — are these the same as the LLM API keys (GOT-41), or distinct OpenClaw creds? | Cedric | 2026-06-20 | Open |
@@ -379,6 +379,7 @@ Then the agent's working dirs / config reset to the golden baseline
 | Date | Change | Author |
 |------|--------|--------|
 | 2026-06-19 | Initial draft — anchors decisions from infra brief + loop-001 | Evie |
+| 2026-06-19 | Q1 resolved: x86 `cpx21` locked (no ARM) | Evie |
 
 ---
 
