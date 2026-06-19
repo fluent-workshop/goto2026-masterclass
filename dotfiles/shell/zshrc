@@ -14,7 +14,9 @@ setopt HIST_FIND_NO_DUPS   # skip duplicates when searching
 setopt SHARE_HISTORY       # share history across sessions
 
 # ---- Completions ----------------------------------------------------------
-autoload -Uz compinit && compinit -d "$HOME/.zcompdump"
+# -i: skip (don't prompt about) insecure/world-writable fpath dirs, so a stray
+# permission never hangs a class session on the interactive "[y/n]?" prompt.
+autoload -Uz compinit && compinit -i -d "$HOME/.zcompdump"
 
 # ---- mise -----------------------------------------------------------------
 # Shims are already on PATH (via ~/.zshenv); activate adds the per-prompt hook

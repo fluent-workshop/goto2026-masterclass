@@ -7,5 +7,5 @@
 # no login) resolve node/npm/openclaw without `mise activate`.
 export PATH="$HOME/.local/share/mise/shims:$HOME/.local/bin:/usr/local/bin:$PATH"
 
-# Drop duplicate PATH entries (zsh ties $PATH and $path).
-typeset -U PATH path
+# Drop duplicate PATH entries ($path is tied to $PATH, so this covers both).
+typeset -U path
