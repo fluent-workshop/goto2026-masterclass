@@ -1,0 +1,11 @@
+# zshenv — sourced for EVERY zsh invocation (login, interactive, and scripts).
+# Keep this minimal: only environment that must exist everywhere, including
+# non-interactive shells that never read zshrc.
+
+# Toolchain on PATH for all shells: mise shims first, then user- and
+# system-local bins. This is what lets a `zsh -c 'openclaw ...'` (no TTY,
+# no login) resolve node/npm/openclaw without `mise activate`.
+export PATH="$HOME/.local/share/mise/shims:$HOME/.local/bin:/usr/local/bin:$PATH"
+
+# Drop duplicate PATH entries (zsh ties $PATH and $path).
+typeset -U PATH path

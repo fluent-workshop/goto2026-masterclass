@@ -1,0 +1,37 @@
+# zshrc — interactive classroom shell for the GOTO 2026 OpenClaw masterclass.
+#
+# Stripped + readable on purpose: attendees may open this file. No personal
+# identity, no private aliases, nothing that reads secrets or assumes a
+# specific machine. PATH lives in ~/.zshenv so it applies to all shells.
+
+# ---- History --------------------------------------------------------------
+HISTFILE="$HOME/.zsh_history"
+HISTSIZE=10000
+SAVEHIST=10000
+setopt HIST_IGNORE_SPACE   # leading-space commands are not recorded
+setopt HIST_IGNORE_DUPS    # don't record an immediate duplicate
+setopt HIST_FIND_NO_DUPS   # skip duplicates when searching
+setopt SHARE_HISTORY       # share history across sessions
+
+# ---- Completions ----------------------------------------------------------
+autoload -Uz compinit && compinit -d "$HOME/.zcompdump"
+
+# ---- mise -----------------------------------------------------------------
+# Shims are already on PATH (via ~/.zshenv); activate adds the per-prompt hook
+# so the toolchain stays in sync if a project pins its own versions.
+command -v mise &>/dev/null && eval "$(mise activate zsh)"
+
+# ---- Prompt ---------------------------------------------------------------
+# Hostname-forward so it is always obvious which box you are on
+# ("you are on Pikachu"). %m = short hostname, %~ = cwd.
+setopt PROMPT_SUBST
+PROMPT='%F{cyan}%m%f:%F{blue}%~%f %# '
+
+# ---- Safe aliases ---------------------------------------------------------
+alias ll='ls -lah'
+alias la='ls -A'
+alias ..='cd ..'
+alias g='git'
+
+# ---- Local overrides (not baked into the image) ---------------------------
+[[ -f "$HOME/.zshrc.local" ]] && source "$HOME/.zshrc.local"
