@@ -16,7 +16,7 @@ set -euo pipefail
 # ---- Pin everything. A masterclass image must be reproducible. -------------
 OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.6.5}"    # pinned to Cedric's known-good build; bump deliberately
 NODE_VERSION="${NODE_VERSION:-22}"                   # LTS
-AGENT_USER="${AGENT_USER:-student}"
+AGENT_USER="${AGENT_USER:-ubuntu}"  # use the stock cloud-image user (passwordless sudo + injected SSH key already present)
 
 log() { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 
@@ -28,12 +28,19 @@ apt-get install -y -qq \
   curl git build-essential ca-certificates gnupg \
   zsh tmux jq ripgrep unzip
 
-# ---- 2. Non-root agent user ----------------------------------------------
+# ---- 2. Agent user --------------------------------------------------------
+# On Ubuntu cloud images the `ubuntu` user already exists with passwordless
+# sudo (via /etc/sudoers.d/90-cloud-init-users) and the injected SSH key.
+# We only create/repair it if something is off (e.g. running on a non-cloud
+# base), then switch its shell to zsh for the classroom experience.
 if ! id "$AGENT_USER" &>/dev/null; then
   log "Creating agent user: $AGENT_USER"
   useradd -m -s /usr/bin/zsh "$AGENT_USER"
   usermod -aG sudo "$AGENT_USER"
   echo "$AGENT_USER ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/90-$AGENT_USER
+else
+  log "Using existing user: $AGENT_USER (setting login shell to zsh)"
+  chsh -s /usr/bin/zsh "$AGENT_USER" 2>/dev/null || usermod -s /usr/bin/zsh "$AGENT_USER"
 fi
 
 # ---- 3. Node via NodeSource (pinned major) -------------------------------
