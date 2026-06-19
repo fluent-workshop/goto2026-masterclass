@@ -9,3 +9,10 @@ keys/
 .DS_Store
 # Generated per-instance cloud-init (contains injected keys)
 infra/cloud-init/generated/
+# cc-dispatch: track loop specs, ignore notify manifest + terraform state
+.cc-dispatch/manifest.json
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+crash.log
