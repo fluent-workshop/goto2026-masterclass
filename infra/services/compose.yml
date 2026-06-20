@@ -48,8 +48,11 @@ services:
     # SonarQube's embedded Elasticsearch needs vm.max_map_count=262144 on the
     # host (baked via /etc/sysctl.d/99-openclaw-sonarqube.conf) or it won't boot.
     mem_limit: 4g
+    # GET (not --spider/HEAD): /api/system/status only answers GET, so a HEAD
+    # probe reports "broken link" and the container never reports healthy even
+    # though SonarQube is operational. Match "status":"UP" in the JSON body.
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9000/api/system/status || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 -qO- http://localhost:9000/api/system/status 2>/dev/null | grep -q '\"status\":\"UP\"'"]
       interval: 15s
       timeout: 5s
       retries: 20
