@@ -20,9 +20,15 @@ server {
     auth_basic           "GOTO 2026 OpenClaw Lab";
     auth_basic_user_file /etc/nginx/.htpasswd;
 
-    # Land students straight on the live desktop.
+    # Land students straight on the live desktop. Served as a STATIC file (not a
+    # `return 302`): a redirect runs in nginx's rewrite phase, BEFORE the access
+    # phase where auth_basic is enforced, so it would leak an unauthenticated
+    # redirect (fail-open). Static serving is the content phase, so basic-auth
+    # gates it — `/` returns 401 until creds exist. The page JS-redirects to the
+    # noVNC client with autoconnect params (which must reach the browser's URL).
     location = / {
-        return 302 /vnc.html?autoconnect=true&resize=remote;
+        root      /usr/share/openclaw-desktop;
+        try_files /index.html =404;
     }
 
     location / {

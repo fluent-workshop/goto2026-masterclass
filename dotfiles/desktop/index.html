@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GOTO 2026 OpenClaw Lab</title>
+    <!--
+      Auth-gated landing page for the classroom desktop. nginx serves this as a
+      STATIC file for `location = /` so the server-level basic-auth runs (static
+      serving is nginx's content phase, after the access/auth phase). A bare
+      `return 302` would run in the earlier rewrite phase and leak an
+      UNAUTHENTICATED redirect — fail-open. The JS redirect below puts the noVNC
+      autoconnect params into the browser's real URL (an internal nginx rewrite
+      could not, since it never changes the address bar).
+    -->
+    <script>
+      location.replace("/vnc.html?autoconnect=true&resize=remote");
+    </script>
+  </head>
+  <body>
+    <noscript>
+      <a href="/vnc.html?autoconnect=true&resize=remote">Enter the lab desktop</a>
+    </noscript>
+  </body>
+</html>

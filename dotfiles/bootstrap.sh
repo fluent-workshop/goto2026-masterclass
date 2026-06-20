@@ -220,6 +220,11 @@ for unit in openclaw-desktop-vnc openclaw-desktop-novnc openclaw-desktop-cred; d
 done
 
 log "Configuring nginx basic-auth reverse proxy for noVNC"
+# Auth-gated landing page served at `/` (static, so basic-auth applies — see the
+# nginx site for why this isn't a `return 302`). JS-redirects into noVNC.
+install -d -m 0755 /usr/share/openclaw-desktop
+install -m 0644 "$SCRIPT_DIR/desktop/index.html" \
+  /usr/share/openclaw-desktop/index.html
 install -m 0644 "$SCRIPT_DIR/desktop/openclaw-desktop.nginx" \
   /etc/nginx/sites-available/openclaw-desktop
 ln -sf /etc/nginx/sites-available/openclaw-desktop \
@@ -232,6 +237,15 @@ rm -f /etc/nginx/sites-enabled/default   # drop the stock welcome site
 systemctl daemon-reload
 systemctl enable openclaw-desktop-vnc.service openclaw-desktop-novnc.service \
   openclaw-desktop-cred.service nginx
+
+# The nginx apt package starts a daemon at install time with the STOCK config —
+# before our site existed. Enabling alone leaves that running daemon listening on
+# the default :80 and ignorant of our :8080 site until a reboot. A fresh clone
+# boots nginx with the baked config already present (correct), but the bake's own
+# nginx (and any re-bake on a live box) must be made to adopt the new site now.
+# restart, not reload: a new `listen 8080` is picked up cleanly on a full restart.
+# It fails closed (no htpasswd yet) so starting it exposes nothing.
+systemctl restart nginx
 
 # ---- 9. Docker service stack: SonarQube CE + Postgres (FR-3) ---------------
 # Docker CE from the official apt repo (idempotent: only added once), the agent
