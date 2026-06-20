@@ -30,8 +30,13 @@ variable "image" {
   default     = "ubuntu-24.04"
 }
 
-variable "ssh_key_name" {
-  description = "Name of an SSH key already present in the Hetzner project. Looked up, never created."
-  type        = string
-  default     = "cedrics-macbook-pro-m4-max"
+variable "ssh_key_names" {
+  description = <<-EOT
+    Names of SSH keys already present in the Hetzner project (looked up, never
+    created). Both Cedric's laptop and the automation host are attached so
+    cc-dispatch can SSH in to drive the bake/verify on the box.
+    'evie-mac-mini-host' = this automation host's id_ed25519 (added 2026-06-19).
+  EOT
+  type        = list(string)
+  default     = ["cedrics-macbook-pro-m4-max", "evie-mac-mini-host"]
 }
