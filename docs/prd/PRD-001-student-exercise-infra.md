@@ -111,13 +111,14 @@ the bake script idempotent so iterating the recipe never requires a fresh box.
 
 ### FR-1: Golden-image bake (GOT-35)
 
-Stand up one fresh Hetzner VPS (Ubuntu 24.04, ≥4GB), run the idempotent bake, then
-snapshot. The snapshot is the single source of truth for all clones.
+Stand up one fresh Hetzner VPS (Ubuntu 24.04, `ccx33` — 8 dedicated vCPU / 32GB /
+240GB NVMe), run the idempotent bake, then snapshot. The snapshot is the single
+source of truth for all clones.
 
 **Acceptance criteria:**
 
 ```gherkin
-Given a fresh Ubuntu 24.04 Hetzner VPS with >=4GB RAM
+Given a fresh Ubuntu 24.04 Hetzner VPS of type ccx33 (8 dedicated vCPU / 32GB RAM)
 When dotfiles/bootstrap.sh runs to completion
 Then node 22 (via mise), npm, and openclaw 2026.6.5 resolve on PATH for the agent user
   And `openclaw --version` prints 2026.6.5
@@ -217,7 +218,7 @@ Then the agent's working dirs / config reset to the golden baseline
 
 | Category | Requirement |
 |----------|-------------|
-| **Performance** | ≥4GB RAM per instance; 2GB tier is unstable under skill load. |
+| **Performance** | `ccx33` — 8 **dedicated** vCPU / 32GB RAM / 240GB NVMe per instance. 32GB is required to hold the full lab stack (Xfce desktop + noVNC + SonarQube + Postgres + OpenClaw + browser automation); the earlier 4GB figure was a stale brief constraint that cannot hold this stack. Dedicated vCPU avoids noisy-neighbor jitter during the live demo. |
 | **Reproducibility** | All clones byte-identical from one snapshot; `openclaw` pinned to 2026.6.5. |
 | **Security** | No secrets in repo; keys 0600, agent-owned; agent does not run as root. |
 | **Operability** | Hostnames spellable from verbal instruction; reset is one command. |
@@ -232,8 +233,8 @@ Then the agent's working dirs / config reset to the golden baseline
 
 | Risk | Severity | Likelihood | Mitigation |
 |------|----------|------------|------------|
-| `openclaw@2026.6.5` unverified on ARM | Medium | Medium | Bake on x86 (`cpx21`); only move to ARM after a confirmed ARM smoke test. |
-| `server_type cx22` unavailable in `ash` | High | High (confirmed) | Use `cpx21` (AMD x86, US) — already chosen in loop-001 report. |
+| `openclaw@2026.6.5` unverified on ARM | Medium | Medium | Bake on x86; `ccx33` is x86 (Intel/AMD dedicated). Only move to ARM after a confirmed ARM smoke test. |
+| `server_type` unavailable in `ash` | Medium | Low | `ccx33` confirmed available in `ash` (Hetzner API, 2026-06-19). The spec's original `cx22`/`cpx21` were undersized and are superseded by `ccx33`. |
 | mise shims not resolving in systemd/non-interactive context | Medium | Medium | Symlink shims into `/usr/local/bin`; verify with a non-login `openclaw --version`. |
 | Hetzner capacity/quota blocks 14-server create | High | Low | Pre-flight quota check (GOT-43) before clone apply. |
 | Per-instance key mix-up (wrong key on wrong box) | Medium | Low | Drive injection from one roster→key map; verify in FR-3 acceptance. |
@@ -326,7 +327,7 @@ Then the agent's working dirs / config reset to the golden baseline
 ## 10. Dependencies & Constraints
 
 - **Hetzner Cloud** — `hetznercloud/hcloud` Terraform provider `~> 1.49`; `HCLOUD_TOKEN` via env.
-- **Region/type** — `cpx21` (AMD x86, 3 vCPU / 4GB) in `ash`; `cx22` is EU-only and would fail in `ash`.
+- **Region/type** — `ccx33` (x86, 8 **dedicated** vCPU / 32GB / 240GB NVMe) in `ash` — confirmed available via Hetzner API 2026-06-19, €0.266/hr. Supersedes the earlier `cpx21`/`cx22` (both undersized for the lab stack). NOTE: an earlier PRD draft labeled this "CCX43" next to 8 vCPU / 32GB specs — that was a mislabel; 8 vCPU / 32GB / 240GB is `ccx33`. `ccx43` is the larger 16 vCPU / 64GB SKU.
 - **openclaw** — pinned `2026.6.5` (Cedric's known-good build).
 - **Node** — 22 LTS via mise.
 - **Tailscale** — pre-auth key for tailnet onboarding (source from 1Password).
@@ -350,7 +351,7 @@ Then the agent's working dirs / config reset to the golden baseline
 
 | # | Question | Owner | Due | Status |
 |---|----------|-------|-----|--------|
-| Q1 | Final server_type — stay x86 `cpx21`, or confirm ARM `cax11` after a smoke test? | Cedric | 2026-06-20 | **Resolved:** Stay x86 `cpx21` to avoid ARM risk on the pinned openclaw build (Cedric, 2026-06-19). |
+| Q1 | Final server_type — confirm SKU + RAM for the full lab stack | Cedric | 2026-06-20 | **Resolved:** `ccx33` (x86, 8 dedicated vCPU / 32GB / 240GB NVMe), x86 to avoid ARM risk on the pinned openclaw build. Earlier `cpx21`/4GB was a stale-brief constraint, superseded (Cedric, 2026-06-19). |
 | Q2 | Tailnet onboarding — pre-auth key baked into the snapshot, or injected per-clone via cloud-init? | Evie | 2026-06-20 | Open |
 | Q3 | Reset granularity — reset agent state only, or also clear shell history / scratch? | Cedric | 2026-06-20 | Open |
 | Q4 | Per-instance OpenClaw keys — are these the same as the LLM API keys (GOT-41), or distinct OpenClaw creds? | Cedric | 2026-06-20 | Open |
@@ -380,6 +381,7 @@ Then the agent's working dirs / config reset to the golden baseline
 |------|--------|--------|
 | 2026-06-19 | Initial draft — anchors decisions from infra brief + loop-001 | Evie |
 | 2026-06-19 | Q1 resolved: x86 `cpx21` locked (no ARM) | Evie |
+| 2026-06-19 | Instance size corrected: `ccx33` (8 dedicated vCPU / 32GB / 240GB NVMe) per PRD §6 + Cedric. Fixed the stale 4GB/`cpx21` references and the "CCX43" SKU mislabel (8 vCPU/32GB = ccx33, not ccx43). | Evie |
 
 ---
 

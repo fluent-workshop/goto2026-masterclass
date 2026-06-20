@@ -9,16 +9,19 @@ variable "location" {
 
 variable "server_type" {
   description = <<-EOT
-    Hetzner server type. Must be a >=4GB shared-vCPU type that is AVAILABLE in
-    var.location.
+    Hetzner server type. Must be AVAILABLE in var.location and large enough to
+    hold the full lab stack (Xfce desktop + noVNC + SonarQube + Postgres +
+    OpenClaw + browser automation).
 
-    Default 'cpx21' = AMD x86, 3 vCPU / 4 GB / 80 GB SSD — offered in the US
-    locations (ash, hil). The spec's suggested 'cx22' (Intel, 2 vCPU / 4 GB) is
-    an EU-only line and is NOT offered in Ashburn, so it would fail at apply.
+    Default 'ccx33' = x86, 8 DEDICATED vCPU / 32 GB / 240 GB NVMe — confirmed
+    available in Ashburn (ash) via Hetzner API 2026-06-19, ~€0.266/hr. Dedicated
+    vCPU avoids noisy-neighbor jitter during the live demo. The earlier 'cpx21'
+    (4 GB) / 'cx22' types were undersized for this stack and are superseded.
+    NOTE: 8 vCPU / 32 GB / 240 GB is ccx33; ccx43 is the larger 16 vCPU / 64 GB.
     See report.md for the full server_type rationale and alternatives.
   EOT
   type        = string
-  default     = "cpx21"
+  default     = "ccx33"
 }
 
 variable "image" {
