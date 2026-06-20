@@ -155,9 +155,11 @@ fi
 # ---- 5. OpenClaw (pinned, via the mise-managed Node) ----------------------
 # Installed with the mise npm, so it lands in mise's node prefix; `mise reshim`
 # then generates an `openclaw` shim alongside node/npm. Guarded on an EXACT
-# version match (parse the last token of `openclaw --version`) so a future
-# 2026.6.50 can't substring-match 2026.6.5 and skip a needed reinstall.
-current_oc="$(as_agent openclaw --version 2>/dev/null | awk '{print $NF}')" || true
+# version match so a future 2026.6.50 can't substring-match 2026.6.5 and skip a
+# needed reinstall. The binary prints `OpenClaw 2026.6.5 (5181e4f)` — extract the
+# first semver token (NOT $NF, which is the trailing git hash, so the guard would
+# never match and we'd reinstall over the network on every bake).
+current_oc="$(as_agent openclaw --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)" || true
 if [[ "$current_oc" != "$OPENCLAW_VERSION" ]]; then
   log "Installing openclaw@${OPENCLAW_VERSION}"
   as_agent npm install -g "openclaw@${OPENCLAW_VERSION}"
@@ -280,13 +282,26 @@ systemctl daemon-reload
 systemctl enable openclaw-services.service   # enabled; first `up`+pull is on real boot
 
 # ---- 10. Verify the bake --------------------------------------------------
-# Canonical non-login resolution gate: a stripped environment (no PATH, no HOME)
+# Canonical non-login resolution gate: a minimal, non-interactive environment
 # must resolve the WHOLE toolchain via the /usr/local/bin shims. Covers all the
 # shims we wired (node/npm/openclaw) — a dangling shim fails the bake here,
 # loudly, rather than silently in class. Runs AS the agent user, since the
 # symlinks resolve to that user's mise tree (root would resolve /root → nothing).
-log "Verifying non-login resolution (stripped env, as $AGENT_USER)"
-sudo -u "$AGENT_USER" env -i /bin/sh -c 'node -v && npm -v && openclaw --version'
+#
+# We provide systemd's default PATH (DefaultEnvironment) but NO HOME — this is
+# exactly the environment a `User=ubuntu` unit launches with. PATH must be a real
+# environment variable here, not just dash's compiled-in fallback: node/openclaw
+# shims are the mise ELF binary (exec'd directly), but npm chains through a
+# `#!/usr/bin/env bash` wrapper whose shebang re-exec needs PATH *in the
+# environment* to find bash. A bare `env -i /bin/sh -c …` (empty env, no exported
+# PATH) makes that npm shebang fail — but no real launcher ships an empty PATH,
+# so that scenario is moot. /usr/local/bin is the only place these three resolve
+# from on this PATH (no system node/npm), so the shim wiring is still genuinely
+# under test. HOME stays unset to assert mise's passwd-based install-tree lookup.
+log "Verifying non-login resolution (systemd-like env, as $AGENT_USER)"
+sudo -u "$AGENT_USER" env -i \
+  PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+  /bin/sh -c 'node -v && npm -v && openclaw --version'
 
 # Static-validate the lab layer without pulling images or needing student creds.
 log "Validating nginx config (nginx -t)"
