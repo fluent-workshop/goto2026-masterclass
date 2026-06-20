@@ -1,0 +1,18 @@
+[Unit]
+Description=OpenClaw noVNC websockify proxy (VNC :1 -> WebSocket 6080, localhost)
+After=openclaw-desktop-vnc.service
+Requires=openclaw-desktop-vnc.service
+
+[Service]
+# Serves the noVNC web UI from /usr/share/novnc (Ubuntu's novnc package) and
+# proxies browser WebSocket traffic to the loopback VNC display. Bound to
+# loopback; nginx (with basic-auth) is the only externally reachable hop.
+Type=simple
+User=ubuntu
+Group=ubuntu
+ExecStart=/usr/bin/websockify --web=/usr/share/novnc 127.0.0.1:6080 127.0.0.1:5901
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

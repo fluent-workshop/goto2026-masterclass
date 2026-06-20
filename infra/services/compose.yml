@@ -1,0 +1,62 @@
+# OpenClaw classroom Docker service stack (FR-3): SonarQube CE + Postgres.
+#
+# Brought up on the real box by openclaw-services.service (docker compose up -d)
+# at first boot — NOT pulled or started during the bake. Image tags are pinned
+# for a reproducible golden snapshot. Memory caps keep SonarQube + Postgres
+# <= 5GB (NFR: OpenClaw + workloads keep >= 20GB on the ccx33's 32GB).
+#
+# SONAR_DB_PASSWORD is the internal Postgres<->SonarQube credential (NOT a
+# student secret). It is generated into this dir's .env at first boot by
+# openclaw-services-env.sh and is never committed and never baked.
+name: openclaw-lab
+
+services:
+  db:
+    image: postgres:16.4-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_DB: sonar
+      POSTGRES_PASSWORD: ${SONAR_DB_PASSWORD:?SONAR_DB_PASSWORD must be set (see .env)}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sonar -d sonar"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  sonarqube:
+    image: sonarqube:10.6.0-community
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://db:5432/sonar
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: ${SONAR_DB_PASSWORD:?SONAR_DB_PASSWORD must be set (see .env)}
+    # Loopback-only: the agent and the local code-review skill reach SonarQube at
+    # 127.0.0.1:9000. Not exposed publicly (no Funnel route to it).
+    ports:
+      - "127.0.0.1:9000:9000"
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    # SonarQube's embedded Elasticsearch needs vm.max_map_count=262144 on the
+    # host (baked via /etc/sysctl.d/99-openclaw-sonarqube.conf) or it won't boot.
+    mem_limit: 4g
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9000/api/system/status || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
+
+volumes:
+  postgres_data:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:

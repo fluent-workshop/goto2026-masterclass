@@ -1,0 +1,23 @@
+[Unit]
+Description=OpenClaw classroom Xfce desktop (TigerVNC :1, localhost-only)
+Documentation=https://github.com/spantree/goto-2026-masterclass
+After=network.target
+
+[Service]
+# -fg keeps tigervncserver in the foreground so Type=simple can supervise it.
+# -localhost yes binds 5901 to loopback (nginx basic-auth is the only door);
+# -SecurityTypes None means no separate VNC password to manage (loopback +
+# nginx auth is the guard). Geometry/depth tuned for conference Wi-Fi.
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu
+Environment=HOME=/home/ubuntu
+ExecStartPre=-/usr/bin/tigervncserver -kill :1
+ExecStart=/usr/bin/tigervncserver :1 -localhost yes -SecurityTypes None -geometry 1920x1080 -depth 24 -fg -xstartup /home/ubuntu/.vnc/xstartup
+ExecStop=/usr/bin/tigervncserver -kill :1
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

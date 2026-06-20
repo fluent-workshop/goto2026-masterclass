@@ -1,0 +1,12 @@
+#!/bin/sh
+# VNC session entrypoint — launches the Xfce desktop for the noVNC chain.
+# Invoked by tigervncserver for display :1 (see openclaw-desktop-vnc.service).
+# Kept minimal on purpose: attendees may open it.
+
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+
+[ -r "$HOME/.Xresources" ] && xrdb "$HOME/.Xresources"
+
+# dbus-launch wires up the session bus Xfce needs for its panel/settings daemons.
+exec dbus-launch --exit-with-session xfce4-session

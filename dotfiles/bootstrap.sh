@@ -53,12 +53,19 @@ as_agent() {
 #     $PWD → the profile copy is silently skipped → a profile-less box (no shims
 #     on interactive PATH, no prompt, no compinit). Require a real checkout.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ ! -d "$SCRIPT_DIR/shell" ]]; then
-  echo "FATAL: '$SCRIPT_DIR/shell' not found." >&2
-  echo "Run from a repo checkout (git clone … && bash dotfiles/bootstrap.sh)," >&2
-  echo "NOT piped over curl|bash — the shell/ profiles must exist on disk." >&2
-  exit 1
-fi
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# The bake copies on-disk assets: the shell profiles (shell/), the desktop
+# units + nginx site (desktop/), and the Docker service stack (infra/services/).
+# A curl|bash or partial checkout leaves these absent → a silently broken box.
+# Require them all up front.
+for _need in "$SCRIPT_DIR/shell" "$SCRIPT_DIR/desktop" "$REPO_ROOT/infra/services"; do
+  if [[ ! -d "$_need" ]]; then
+    echo "FATAL: '$_need' not found." >&2
+    echo "Run from a repo checkout (git clone … && bash dotfiles/bootstrap.sh)," >&2
+    echo "NOT piped over curl|bash — the bake's on-disk assets must exist." >&2
+    exit 1
+  fi
+done
 
 # (b) Non-login resolution relies on /usr/local/bin being on dash's default
 #     PATH (where we symlink the shims). It is on Ubuntu 24.04, but it's a
@@ -185,7 +192,94 @@ for rc in zshrc zshenv; do
     "$SCRIPT_DIR/shell/$rc" "$AGENT_HOME/.$rc"
 done
 
-# ---- 8. Verify the bake ---------------------------------------------------
+# ---- 8. Browser desktop: Xfce + TigerVNC + noVNC + nginx auth (FR-4) -------
+# The lab's heaviest bake-once layer. Chain: Xfce session on a loopback-only
+# TigerVNC display (:1) → websockify bridges VNC to a browser WebSocket (6080,
+# loopback) → nginx reverse-proxies 8080 with HTTP basic-auth. Tailscale Funnel
+# (a later loop) fronts 8080 and terminates TLS; here we only make the local
+# chain correct. The per-student htpasswd is NOT baked — it's written at first
+# boot by openclaw-desktop-cred.service from a cloud-init-dropped credential, so
+# the snapshot carries no secret and nginx fails closed until creds land.
+log "Installing desktop stack (Xfce + TigerVNC + noVNC + nginx)"
+apt-get install -y -qq \
+  xfce4 xfce4-terminal dbus-x11 \
+  tigervnc-standalone-server tigervnc-common \
+  novnc websockify \
+  nginx apache2-utils
+
+log "Installing desktop session + service units"
+install -d -o "$AGENT_USER" -g "$AGENT_USER" -m 0755 "$AGENT_HOME/.vnc"
+install -m 0755 -o "$AGENT_USER" -g "$AGENT_USER" \
+  "$SCRIPT_DIR/desktop/xstartup" "$AGENT_HOME/.vnc/xstartup"
+install -m 0755 "$SCRIPT_DIR/desktop/openclaw-desktop-cred.sh" \
+  /usr/local/sbin/openclaw-desktop-cred.sh
+for unit in openclaw-desktop-vnc openclaw-desktop-novnc openclaw-desktop-cred; do
+  install -m 0644 "$SCRIPT_DIR/desktop/$unit.service" "/etc/systemd/system/$unit.service"
+done
+
+log "Configuring nginx basic-auth reverse proxy for noVNC"
+install -m 0644 "$SCRIPT_DIR/desktop/openclaw-desktop.nginx" \
+  /etc/nginx/sites-available/openclaw-desktop
+ln -sf /etc/nginx/sites-available/openclaw-desktop \
+  /etc/nginx/sites-enabled/openclaw-desktop
+rm -f /etc/nginx/sites-enabled/default   # drop the stock welcome site
+
+# Enable (not necessarily start) the chain so it comes up on every boot. nginx
+# is socket-bound and harmless to start now; the VNC/websockify units come up on
+# the real box's boot. None of this pulls or spends.
+systemctl daemon-reload
+systemctl enable openclaw-desktop-vnc.service openclaw-desktop-novnc.service \
+  openclaw-desktop-cred.service nginx
+
+# ---- 9. Docker service stack: SonarQube CE + Postgres (FR-3) ---------------
+# Docker CE from the official apt repo (idempotent: only added once), the agent
+# user in the `docker` group (intentional root-equivalent access — single-student
+# box, per PRD FR-3 security note), and the SonarQube Elasticsearch sysctl baked
+# in. The compose stack + a systemd unit are laid down but NOT pulled/started —
+# the bake never touches the network for images; the unit brings them up on the
+# real box's first boot.
+if ! command -v docker &>/dev/null; then
+  log "Installing Docker CE (official apt repo)"
+  install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  chmod a+r /etc/apt/keyrings/docker.asc
+  _arch="$(dpkg --print-architecture)"
+  # shellcheck disable=SC1091  # /etc/os-release exists at bake time, not lint time
+  _codename="$(. /etc/os-release && echo "$VERSION_CODENAME")"
+  echo "deb [arch=$_arch signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $_codename stable" \
+    > /etc/apt/sources.list.d/docker.list
+  apt-get update -qq
+  apt-get install -y -qq \
+    docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+else
+  log "Docker already installed — skipping repo + install"
+fi
+
+# Agent user in the docker group (idempotent).
+if ! id -nG "$AGENT_USER" | tr ' ' '\n' | grep -qx docker; then
+  log "Adding $AGENT_USER to the docker group"
+  usermod -aG docker "$AGENT_USER"
+else
+  log "$AGENT_USER already in docker group — skipping"
+fi
+
+# SonarQube's embedded Elasticsearch refuses to start without this. Bake it so
+# it survives reboots; idempotent (same content each run).
+log "Baking vm.max_map_count sysctl for SonarQube"
+printf 'vm.max_map_count=262144\n' > /etc/sysctl.d/99-openclaw-sonarqube.conf
+sysctl -p /etc/sysctl.d/99-openclaw-sonarqube.conf >/dev/null
+
+log "Laying down the SonarQube + Postgres compose stack (not started)"
+install -d -m 0750 /opt/openclaw/services
+install -m 0644 "$REPO_ROOT/infra/services/compose.yml" /opt/openclaw/services/compose.yml
+install -m 0755 "$REPO_ROOT/infra/services/openclaw-services-env.sh" \
+  /usr/local/sbin/openclaw-services-env.sh
+install -m 0644 "$REPO_ROOT/infra/services/openclaw-services.service" \
+  /etc/systemd/system/openclaw-services.service
+systemctl daemon-reload
+systemctl enable openclaw-services.service   # enabled; first `up`+pull is on real boot
+
+# ---- 10. Verify the bake --------------------------------------------------
 # Canonical non-login resolution gate: a stripped environment (no PATH, no HOME)
 # must resolve the WHOLE toolchain via the /usr/local/bin shims. Covers all the
 # shims we wired (node/npm/openclaw) — a dangling shim fails the bake here,
@@ -193,6 +287,20 @@ done
 # symlinks resolve to that user's mise tree (root would resolve /root → nothing).
 log "Verifying non-login resolution (stripped env, as $AGENT_USER)"
 sudo -u "$AGENT_USER" env -i /bin/sh -c 'node -v && npm -v && openclaw --version'
+
+# Static-validate the lab layer without pulling images or needing student creds.
+log "Validating nginx config (nginx -t)"
+nginx -t
+
+log "Validating compose syntax (config only, no pull/up)"
+# A throwaway value satisfies the ${SONAR_DB_PASSWORD:?} guard for parsing; the
+# real internal password is generated on first boot, never here.
+SONAR_DB_PASSWORD=bake-validation-only \
+  docker compose -f /opt/openclaw/services/compose.yml config -q
+
+log "Confirming lab units are enabled (not started here)"
+systemctl is-enabled openclaw-desktop-vnc.service openclaw-desktop-novnc.service \
+  openclaw-desktop-cred.service openclaw-services.service nginx
 
 log "Bake complete. Snapshot this server now."
 log "  hcloud server create-image <name> --type snapshot --description goto2026-golden"
