@@ -382,6 +382,8 @@ Then the agent's working dirs / config reset to the golden baseline
 | 2026-06-19 | Initial draft — anchors decisions from infra brief + loop-001 | Evie |
 | 2026-06-19 | Q1 resolved: x86 `cpx21` locked (no ARM) | Evie |
 | 2026-06-19 | Instance size corrected: `ccx33` (8 dedicated vCPU / 32GB / 240GB NVMe) per PRD §6 + Cedric. Fixed the stale 4GB/`cpx21` references and the "CCX43" SKU mislabel (8 vCPU/32GB = ccx33, not ccx43). | Evie |
+| 2026-06-19 | loop-004 reconciliation vs canonical Notion PRD-001 v1.1: repo is a lean headless box; canonical spec is a full graphical lab (~6 of 9 FRs absent). Path 2 (hybrid, sequenced MVP-first) chosen. | Evie |
+| 2026-06-19 | **4 blocking decisions resolved (Cedric):** (1) browser desktop **IN** — Xfce+noVNC+nginx basic-auth baked, per-student auth over Funnel; (2) Anthropic **org sub-keys** — provisioned via admin API, per-key spend caps, revoked at teardown; (3) Discord **new dedicated server** — 14 channels + roles + per-student bot, nuked at teardown; (4) Tailscale Funnel + gateway auth **verified on the first Hetzner box** as a pass/fail gate before snapshot. | Evie |
 
 ---
 
