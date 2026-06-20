@@ -12,7 +12,13 @@ RemainAfterExit=yes
 WorkingDirectory=/opt/openclaw/services
 ExecStartPre=/usr/local/sbin/openclaw-services-env.sh
 ExecStart=/usr/bin/docker compose -f /opt/openclaw/services/compose.yml up -d
+# Hold the unit "activating" until SonarQube actually answers UP (M8), so units
+# that order After=openclaw-services.service see a genuinely ready SonarQube.
+ExecStartPost=/usr/local/sbin/openclaw-sonarqube-ready.sh
 ExecStop=/usr/bin/docker compose -f /opt/openclaw/services/compose.yml down
+# Generous start timeout: first boot pulls images, then the readiness poll waits
+# up to ~2.5 min for SonarQube to come up. Default 90s would kill it mid-boot.
+TimeoutStartSec=600
 
 [Install]
 WantedBy=multi-user.target

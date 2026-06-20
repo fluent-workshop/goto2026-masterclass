@@ -32,6 +32,7 @@
 # Env:
 #   DESKTOP_USER            override the desktop username (default: student)
 #   OPENCLAW_API_KEY_SOURCE stub (default) | env | op
+#   ALLOW_STUB              set to 1 to permit the stub key source (dev/test only)
 #   OPENCLAW_API_KEY        used when OPENCLAW_API_KEY_SOURCE=env
 #   OP_API_KEY_ITEM         used when OPENCLAW_API_KEY_SOURCE=op (op:// ref)
 
@@ -48,7 +49,14 @@ MANIFEST="$OUT_DIR/credentials-manifest.tsv"
 # --- config ------------------------------------------------------------------
 DESKTOP_USER="${DESKTOP_USER:-student}"
 OPENCLAW_API_KEY_SOURCE="${OPENCLAW_API_KEY_SOURCE:-stub}"
+ALLOW_STUB="${ALLOW_STUB:-0}"
 FORCE=0
+
+# Validation patterns for values that flow into YAML and shell on the box.
+#   - hostname: RFC 1123 label (lowercase, starts alnum-letter, 2-63 chars).
+#   - desktop user: a conservative POSIX-ish username, sourced as root at boot.
+HOSTNAME_RE='^[a-z][a-z0-9-]{1,62}$'
+DESKTOP_USER_RE='^[a-z_][a-z0-9_-]{0,31}$'
 
 # --- helpers -----------------------------------------------------------------
 die()  { echo "clone.sh: $*" >&2; exit 1; }
@@ -96,6 +104,19 @@ existing_password() {
   awk -F'\t' -v h="$host" '$1==h {print $3; exit}' "$MANIFEST"
 }
 
+# --- validate config ---------------------------------------------------------
+# Fail fast on a stub key (M5): the stub renders a placeholder that passes the
+# unsubstituted-placeholder check, so a fleet render that forgot to set a real
+# source would silently ship 14 broken boxes. Require an explicit opt-in.
+if [[ "$OPENCLAW_API_KEY_SOURCE" == "stub" && "$ALLOW_STUB" != "1" ]]; then
+  die "stub API key source requires ALLOW_STUB=1. Set a real key source (OPENCLAW_API_KEY_SOURCE=env|op) or ALLOW_STUB=1 for dev/test only."
+fi
+
+# DESKTOP_USER is substituted into /etc/openclaw/desktop.env and sourced as root
+# at first boot (M4); reject anything outside a safe username shape.
+[[ "$DESKTOP_USER" =~ $DESKTOP_USER_RE ]] \
+  || die "invalid DESKTOP_USER '$DESKTOP_USER' (must match $DESKTOP_USER_RE)"
+
 # --- arg parse ---------------------------------------------------------------
 hosts=()
 for a in "$@"; do
@@ -119,6 +140,17 @@ if [[ ${#hosts[@]} -eq 0 ]]; then
   done < "$INSTANCES"
 fi
 [[ ${#hosts[@]} -gt 0 ]] || die "no hosts to render"
+
+# Validate + de-duplicate hostnames before rendering anything. A bad hostname
+# flows into a `runcmd` hostnamectl call and the cloud-init YAML (M2); a repeated
+# one would overwrite its own cloud-init and write conflicting manifest rows (m4).
+declare -A _seen_hosts=()
+for host in "${hosts[@]}"; do
+  [[ "$host" =~ $HOSTNAME_RE ]] \
+    || die "invalid hostname '$host' (must match RFC 1123: $HOSTNAME_RE)"
+  [[ -n "${_seen_hosts[$host]:-}" ]] && die "duplicate hostname in input: '$host'"
+  _seen_hosts["$host"]=1
+done
 
 # --- render ------------------------------------------------------------------
 mkdir -p "$OUT_DIR"
@@ -155,9 +187,17 @@ for host in "${hosts[@]}"; do
   fi
 
   api_key="$(fetch_api_key "$host")"
+  # Reject CR/LF in the key up front (M3): defense in depth even though the key
+  # is base64-encoded below — a newline in the source key is almost always a
+  # copy-paste artifact, and failing loudly beats silently encoding a bad key.
+  [[ "$api_key" == *$'\n'* || "$api_key" == *$'\r'* ]] \
+    && die "OpenClaw API key for '$host' contains CR/LF; refusing to render"
+  # Encode as a single base64 line so it lands in the cloud-init write_files
+  # block (encoding: b64) as one safe scalar regardless of the key's bytes.
+  api_key_b64="$(printf '%s' "$api_key" | base64 | tr -d '\n')"
 
   rendered="${template//\{\{HOSTNAME\}\}/$host}"
-  rendered="${rendered//\{\{OPENCLAW_API_KEY\}\}/$api_key}"
+  rendered="${rendered//\{\{OPENCLAW_API_KEY_B64\}\}/$api_key_b64}"
   rendered="${rendered//\{\{DESKTOP_USER\}\}/$DESKTOP_USER}"
   rendered="${rendered//\{\{DESKTOP_PASS\}\}/$pass}"
 

@@ -13,8 +13,11 @@ map $http_upgrade $connection_upgrade {
 }
 
 server {
-    listen      8080;
-    listen      [::]:8080;
+    # Loopback-only bind (C1). Tailscale Funnel proxies localhost and terminates
+    # TLS upstream, so nginx must never answer 8080 on a public interface — a
+    # Hetzner firewall gap would otherwise expose noVNC + basic-auth in cleartext.
+    # The bake asserts no non-loopback 8080 listener (see bootstrap phase_verify).
+    listen      127.0.0.1:8080;
     server_name _;
 
     auth_basic           "GOTO 2026 OpenClaw Lab";

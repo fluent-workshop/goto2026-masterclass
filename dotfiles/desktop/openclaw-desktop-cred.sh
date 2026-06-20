@@ -13,6 +13,12 @@ ENV_FILE="/etc/openclaw/desktop.env"
 HTPASSWD="/etc/nginx/.htpasswd"
 
 if [[ ! -r "$ENV_FILE" ]]; then
+  # Steady state after first boot: the env file was consumed and deleted (m2),
+  # while the htpasswd it produced persists — nginx keeps working, do nothing.
+  if [[ -f "$HTPASSWD" ]]; then
+    echo "openclaw-desktop-cred: $ENV_FILE absent, $HTPASSWD present — credential already provisioned."
+    exit 0
+  fi
   echo "openclaw-desktop-cred: $ENV_FILE absent — leaving htpasswd unset; nginx fails closed." >&2
   exit 0
 fi
@@ -32,3 +38,9 @@ htpasswd -bBc "$HTPASSWD" "$DESKTOP_USER" "$DESKTOP_PASS"
 chgrp www-data "$HTPASSWD" 2>/dev/null || true
 chmod 0640 "$HTPASSWD"
 echo "openclaw-desktop-cred: wrote $HTPASSWD for user '$DESKTOP_USER'."
+
+# The plaintext password has now been consumed into the bcrypt htpasswd; remove
+# the cleartext credential so it does not persist on the box (m2). Subsequent
+# boots hit the "already provisioned" branch above and leave the htpasswd intact.
+rm -f "$ENV_FILE"
+echo "openclaw-desktop-cred: removed $ENV_FILE (plaintext credential consumed)."
