@@ -1,0 +1,1 @@
+keep: that loops 001-003 built a lean headless agent box (terraform+bash bootstrap+cloud-init, mise/node/openclaw, ccx33 32GB, 14 pokemon clones); the loop-004 task is ANALYSIS ONLY (divergence map vs canonical Notion PRD, no code/spend); drop: all the loop-003 mise/shellcheck/version-pin implementation detail, the review-fix specifics, install noise
