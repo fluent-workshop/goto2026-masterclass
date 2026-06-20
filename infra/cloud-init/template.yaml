@@ -1,10 +1,11 @@
 #cloud-config
 # Per-instance cloud-init template for GOTO 2026 student VPS.
-# Placeholders {{HOSTNAME}} and {{OPENCLAW_API_KEY}} are substituted by
-# infra/clone.sh at create time, per row in instances.txt.
+# The placeholders HOSTNAME, OPENCLAW_API_KEY, DESKTOP_USER and DESKTOP_PASS
+# (each wrapped in double braces below) are substituted by infra/clone.sh at
+# create time, per row in instances.txt.
 #
 # This is the ONLY per-instance layer. Everything else comes from the
-# golden snapshot, so each box differs only by name + its injected key.
+# golden snapshot, so each box differs only by name + its injected secrets.
 
 hostname: {{HOSTNAME}}
 preserve_hostname: false
@@ -16,6 +17,19 @@ write_files:
     permissions: '0600'
     content: |
       {{OPENCLAW_API_KEY}}
+
+  # Per-instance desktop basic-auth credential consumed at first boot by the
+  # baked openclaw-desktop-cred.service (After=cloud-final), which turns it into
+  # the nginx bcrypt htpasswd. Secret: root:root 0600. write_files runs in the
+  # cloud-init config stage, well before cloud-final, so the file is present when
+  # the cred unit fires. Absent => nginx fails closed (401); never baked into the
+  # snapshot, only injected here per instance.
+  - path: /etc/openclaw/desktop.env
+    owner: root:root
+    permissions: '0600'
+    content: |
+      DESKTOP_USER={{DESKTOP_USER}}
+      DESKTOP_PASS={{DESKTOP_PASS}}
 
 runcmd:
   # Make the hostname stick for prompts/support ("Pikachu is wedged")
