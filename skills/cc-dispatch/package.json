@@ -1,0 +1,8 @@
+{
+  "name": "openclaw-skill-cc-dispatch",
+  "version": "0.1.0",
+  "private": true,
+  "devDependencies": {
+    "bun-types": "latest"
+  }
+}
