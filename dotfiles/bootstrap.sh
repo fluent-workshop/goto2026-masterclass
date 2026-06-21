@@ -33,10 +33,6 @@ MISE_VERSION="${MISE_VERSION:-v2026.6.11}"           # exact mise release tag (g
 # SHASUMS256.txt. MUST be updated together with MISE_VERSION — a mismatch
 # fails the bake loudly rather than installing an unverified binary.
 MISE_SHA256="${MISE_SHA256:-4c1036af15efea3a4d83f13481132ec7d7dda15e7ec5869dd70a64072bf1a6c9}"
-# code-server (VS Code in the browser, FR-4) — pinned .deb from the upstream
-# GitHub release. Bump deliberately; confirm the tag exists at
-# https://github.com/coder/code-server/releases (TODO: verify the exact pin).
-CODE_SERVER_VERSION="${CODE_SERVER_VERSION:-4.100.3}"
 # cloudflared (Cloudflare Tunnel connector) — pinned .deb from the upstream
 # GitHub release. Bump deliberately; confirm the tag exists at
 # https://github.com/cloudflare/cloudflared/releases (TODO: verify the exact pin).
@@ -279,29 +275,9 @@ phase_desktop() {
     install -m 0644 "$SCRIPT_DIR/desktop/$unit.service" "/etc/systemd/system/$unit.service"
   done
 
-  # ---- code-server (VS Code in the browser, loopback:8088) ------------------
-  # Installed from the pinned upstream .deb (a version-pinned network fetch at
-  # bake, exactly like Docker's repo packages — NOT the live `curl … | sh`
-  # installer, whose resolved version drifts). code-server is NOT fronted by the
-  # noVNC nginx block: phase_tunnel gives it its own cloudflared ingress straight
-  # to 127.0.0.1:8088. Its own auth is OFF (--auth none) — the hash-obscured
-  # cloudflared subdomain is the gate, matching the desktop's basic-auth model.
-  _cs_installed=""
-  if command -v code-server >/dev/null 2>&1; then
-    _cs_installed="$(code-server --version 2>/dev/null | awk 'NR==1{print $1}')" || true
-  fi
-  if [[ "$_cs_installed" != "$CODE_SERVER_VERSION" ]]; then
-    log "Installing code-server ${CODE_SERVER_VERSION} (pinned .deb)"
-    _cs_deb="$(mktemp --suffix=.deb)"
-    curl -fsSL -o "$_cs_deb" \
-      "https://github.com/coder/code-server/releases/download/v${CODE_SERVER_VERSION}/code-server_${CODE_SERVER_VERSION}_amd64.deb"
-    apt-get install -y -qq "$_cs_deb"
-    rm -f "$_cs_deb"
-  else
-    log "code-server ${CODE_SERVER_VERSION} already present — skipping"
-  fi
-  install -m 0644 "$SCRIPT_DIR/desktop/openclaw-code-server.service" \
-    /etc/systemd/system/openclaw-code-server.service
+  # NOTE: code-server (browser VS Code) is intentionally DEFERRED out of this lab
+  # — it is the one service genuinely dangerous to expose, and the editor path is
+  # the VS Code Remote Tunnel (devtunnel) instead, which needs no inbound ingress.
 
   log "Configuring nginx basic-auth reverse proxy for noVNC"
   # Auth-gated landing page served at `/` (static, so basic-auth applies — see the
@@ -324,7 +300,7 @@ phase_desktop() {
   # the real box's boot. None of this pulls or spends.
   systemctl daemon-reload
   systemctl enable openclaw-desktop-vnc.service openclaw-desktop-novnc.service \
-    openclaw-desktop-cred.service openclaw-code-server.service nginx
+    openclaw-desktop-cred.service nginx
 
   # The nginx apt package starts a daemon at install time with the STOCK config —
   # before our site existed. Enabling alone leaves that running daemon listening on
@@ -342,9 +318,9 @@ phase_desktop() {
 # Replaces the prior VPN-fronted access model. Each box runs ONE cloudflared
 # daemon whose ingress rules route `${host}-goto2026-*` hostnames (one label
 # under the apex fluentworkshop.dev, protected ones hash-obscured) to local
-# services (noVNC desktop, code-server, Supabase Studio, the OpenClaw gateway,
-# SSH, Postgres). Cloudflare terminates TLS at its edge, so nothing here listens
-# on a public interface.
+# services (noVNC desktop, Supabase Studio, the OpenClaw gateway, SSH, Postgres).
+# Cloudflare terminates TLS at its edge, so nothing here listens on a public
+# interface.
 #
 # DNS: there is NO fleet-wide wildcard CNAME (a wildcard points every box at one
 # tunnel — wrong for per-box tunnels). Each box gets explicit FLAT per-service
@@ -526,7 +502,7 @@ phase_verify() {
   SONAR_DB_PASSWORD=bake-validation-only \
     docker compose -f /opt/openclaw/services/compose.yml config -q
 
-  # ---- Cloudflare Tunnel layer (cloudflared + code-server) ------------------
+  # ---- Cloudflare Tunnel layer (cloudflared) --------------------------------
   log "Asserting cloudflared is installed"
   command -v cloudflared >/dev/null 2>&1 || {
     echo "FATAL: cloudflared not installed (phase_tunnel)." >&2
@@ -542,17 +518,9 @@ phase_verify() {
     exit 1
   fi
 
-  # code-server is enabled but NOT started at bake (it binds 8088 on first boot).
-  # Assert the binary installed; the unit-enabled check below covers boot-time.
-  log "Asserting code-server is installed"
-  command -v code-server >/dev/null 2>&1 || {
-    echo "FATAL: code-server not installed (phase_desktop)." >&2
-    exit 1
-  }
-
   log "Confirming lab units are enabled (not started here)"
   systemctl is-enabled openclaw-desktop-vnc.service openclaw-desktop-novnc.service \
-    openclaw-desktop-cred.service openclaw-code-server.service \
+    openclaw-desktop-cred.service \
     openclaw-tunnel.service openclaw-services.service nginx
 
   touch "$BAKE_STAMP_DIR/${FUNCNAME[0]}.done"

@@ -8,16 +8,14 @@ Date: 2026-06-20. Branch: `main`.
 
 ## Per-phase status
 
-### Phase A — code-server (in `phase_desktop`) ✅
+### Phase A — code-server: DEFERRED ⏸
 
-- Pinned `CODE_SERVER_VERSION=4.100.3` added to the pinned-versions block.
-- Install in `phase_desktop` from the pinned upstream `.deb` (version-guarded,
-  idempotent — like Docker's repo packages, not the live `curl | sh` installer).
-- New unit `dotfiles/desktop/openclaw-code-server.service`: `Type=exec`,
-  `User=ubuntu`, binds `127.0.0.1:8088`, `--auth none --disable-telemetry`,
-  WorkingDirectory `/home/ubuntu`. Enabled (not started at bake).
-- NOT routed through the noVNC nginx block — gets its own cloudflared ingress to
-  `localhost:8088` (Phase B).
+- code-server was originally added here but is now **deferred entirely** (security):
+  it is the one service genuinely dangerous to expose. The editor path is the
+  VS Code Remote Tunnel (devtunnel), which dials out and needs no inbound ingress.
+- Removed: the `phase_desktop` install, the `openclaw-code-server.service` unit,
+  the `CODE_SERVER_VERSION` pin, the `8088` ingress rule, and the `phase_verify`
+  check. A short deferral note remains in `openclaw-tunnel-config.sh`.
 
 ### Phase B — cloudflared (`phase_tunnel`, new) ✅
 
@@ -31,14 +29,14 @@ Date: 2026-06-20. Branch: `main`.
 - Unit `dotfiles/tunnel/openclaw-tunnel.service`: `After=network-online.target`,
   `EnvironmentFile=/etc/openclaw/tunnel.env`, `ExecStartPre` renders config,
   `ExecStart` runs token-based `cloudflared … tunnel run --token …` (no cert.pem).
-- First boot: helper renders `/etc/cloudflared/config.yml` with all 7 ingress
+- First boot: helper renders `/etc/cloudflared/config.yml` with all 6 ingress
   rules, named `${host}-goto2026-*` one label under the apex `fluentworkshop.dev`
-  (`-goto2026-app` public/no-hash; `-goto2026-desktop`/`-code-server`/
-  `-supabase-studio`/`-gateway`/`-ssh`/`-postgres` hash-obscured) + the
-  `http_status:404` catch-all. Idempotent via content compare (`cmp`).
-  DNS is flat per-box CNAMEs (no fleet wildcard); one-label-under-apex names let
-  free Universal SSL `*.fluentworkshop.dev` cover them with no CT-log exposure.
-- **Verified off-box:** renders exactly 8 `service:` lines (7 + catch-all),
+  (`-goto2026-app` public/no-hash; `-goto2026-desktop`/`-supabase-studio`/
+  `-gateway`/`-ssh`/`-postgres` hash-obscured) + the `http_status:404` catch-all.
+  Idempotent via content compare (`cmp`). DNS is flat per-box CNAMEs (no fleet
+  wildcard); one-label-under-apex names let free Universal SSL
+  `*.fluentworkshop.dev` cover them with no CT-log exposure.
+- **Verified off-box:** renders exactly 7 `service:` lines (6 + catch-all),
   hash derivation matches `sha256sum|cut -c1-8`, second run is a no-op.
 
 ### Phase C — nginx fail-fast + 503 ✅
@@ -71,8 +69,8 @@ Date: 2026-06-20. Branch: `main`.
 ### Phase E — verify + remove Tailscale ✅
 
 - `phase_verify` additions: cloudflared installed; `/etc/cloudflared/config.yml`
-  ABSENT at bake (first-boot generated); code-server installed; `is-enabled`
-  list extended with `openclaw-code-server.service` + `openclaw-tunnel.service`.
+  ABSENT at bake (first-boot generated); `is-enabled` list extended with
+  `openclaw-tunnel.service`.
 - Updated the loopback-8080 assertion comment (was "Tailscale Funnel").
 - **Zero `tailscale`/`Funnel`/`funnel`/`tailnet` references** remain in
   `dotfiles/`, `infra/`, `docs/`, `README.md` (grep clean). Touched:
@@ -91,9 +89,11 @@ Date: 2026-06-20. Branch: `main`.
 
 ## TODOs / open items
 
-- **Pin versions unverified.** `CODE_SERVER_VERSION=4.100.3` and
-  `CLOUDFLARED_VERSION=2025.11.1` are plausible placeholders — confirm/bump
-  against the upstream release pages before the bake (commented inline).
+- **Pin version unverified.** `CLOUDFLARED_VERSION=2025.11.1` is a plausible
+  placeholder — confirm/bump against the upstream release page before the bake
+  (commented inline).
+- **code-server deferred (security).** The editor path is the VS Code Remote
+  Tunnel (devtunnel); code-server is out of this loop entirely.
 - **OpenClaw gateway port** assumed `18789` per spec default — confirm via
   `openclaw --help`/docs on a live box (TODO left in the helper).
 - **Token + local config.yml interaction:** the architecture (per spec) renders

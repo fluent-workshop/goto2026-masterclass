@@ -77,8 +77,9 @@ trap 'rm -f "$tmp"' EXIT
   # --- Protected (hash-obscured) browser services. -------------------------
   echo "  - hostname: ${host}-goto2026-desktop-${h}.${DOMAIN_BASE}"
   echo "    service: http://localhost:8080"
-  echo "  - hostname: ${host}-goto2026-code-server-${h}.${DOMAIN_BASE}"
-  echo "    service: http://localhost:8088"
+  # NOTE: code-server (browser VS Code, would be localhost:8088) is DEFERRED — it
+  # is the one service genuinely dangerous to expose, so the editor path is the
+  # VS Code Remote Tunnel (devtunnel) instead, which needs no inbound ingress.
   echo "  - hostname: ${host}-goto2026-supabase-studio-${h}.${DOMAIN_BASE}"
   echo "    service: http://localhost:54323"
   # OpenClaw gateway port: default 18789; confirm via `openclaw --help`/docs.
@@ -102,4 +103,4 @@ if [[ -f "$CONFIG" ]] && cmp -s "$tmp" "$CONFIG"; then
 fi
 
 install -m 0644 "$tmp" "$CONFIG"
-echo "openclaw-tunnel-config: wrote $CONFIG for host '${host}' (7 ingress rules + catch-all)."
+echo "openclaw-tunnel-config: wrote $CONFIG for host '${host}' (6 ingress rules + catch-all)."
