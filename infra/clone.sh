@@ -169,42 +169,36 @@ fi
 [[ "$DESKTOP_USER" =~ $DESKTOP_USER_RE ]] \
   || die "invalid DESKTOP_USER '$DESKTOP_USER' (must match $DESKTOP_USER_RE)"
 
-# Read the fleet-wide tunnel secrets ONCE (same value for every box) and validate
-# them before rendering anything. These flow into /etc/openclaw/tunnel.env on the
-# box; reject shapes that would break the shell .env or the on-box hash.
+# Read the fleet-wide TUNNEL_SALT ONCE (same value for every box; used for
+# per-box hash derivation on first boot). CLOUDFLARED_TOKEN is now PER-INSTANCE
+# (each box gets its own tunnel) — fetched per-host via fetch_instance_cloudflared_token().
 tunnel_salt="$(fetch_tunnel_secret 'TUNNEL_SALT' \
   'stubsalt00000000deadbeef' 'TUNNEL_SALT' 'OP_TUNNEL_SALT_ITEM')"
-cloudflared_token="$(fetch_tunnel_secret 'CLOUDFLARED_TOKEN' \
-  'REPLACE_ME_cloudflared_connector_token' 'CLOUDFLARED_TOKEN' 'OP_CLOUDFLARED_TOKEN_ITEM')"
-# POSTGRES_APP_PASSWORD is per-instance; fetched inside the host loop via fetch_instance_password()
 
-# Salt is concatenated with the hostname and sha256'd on the box, and lands in a
-# shell .env — keep it strictly hex/alphanumeric.
+# Salt lands in a shell .env — keep it strictly hex/alphanumeric.
 [[ "$tunnel_salt" =~ $TUNNEL_SALT_RE ]] \
   || die "invalid TUNNEL_SALT (must match $TUNNEL_SALT_RE — hex/alphanumeric, 8-128 chars)"
-# Token + Postgres password are opaque, but a CR/LF would corrupt the .env block
-# (and is almost always a copy-paste artifact); reject it loudly up front.
-[[ "$cloudflared_token" == *$'\n'* || "$cloudflared_token" == *$'\r'* ]] \
-  && die "CLOUDFLARED_TOKEN contains CR/LF; refusing to render"
 INSTANCE_SECRETS="$REPO_ROOT/instance-secrets.toml"
 [[ -f "$INSTANCE_SECRETS" ]] \
   || die "instance-secrets.toml not found at $INSTANCE_SECRETS"
 
-# Parse per-instance POSTGRES_APP_PASSWORD from instance-secrets.toml.
-# Sections look like: [pikachu] / POSTGRES_APP_PASSWORD = "word-word-word"
-fetch_instance_password() {
-  local host="$1"
-  local pw
-  # Extract value between the [host] section and the next section header.
-  pw="$(sed -n "/^\[${host}\]/,/^\[/p" "$INSTANCE_SECRETS" \
-    | grep '^POSTGRES_APP_PASSWORD' \
-    | sed 's/POSTGRES_APP_PASSWORD *= *"\(.*\)"/\1/')"
-  [[ -n "$pw" ]] \
-    || die "no POSTGRES_APP_PASSWORD for host '$host' in instance-secrets.toml"
-  [[ "$pw" == *$'\n'* || "$pw" == *$'\r'* ]] \
-    && die "POSTGRES_APP_PASSWORD for '$host' contains CR/LF"
-  printf '%s' "$pw"
+# Parse a per-instance value from instance-secrets.toml.
+# Sections look like: [pikachu] / KEY = "value"
+fetch_instance_secret() {
+  local host="$1" key="$2" label="${3:-$2}"
+  local val
+  val="$(sed -n "/^\[${host}\]/,/^\[/p" "$INSTANCE_SECRETS" \
+    | grep "^${key}" \
+    | sed "s/${key} *= *\"\(.*\)\"/\1/")"
+  [[ -n "$val" ]] \
+    || die "no ${label} for host '${host}' in instance-secrets.toml"
+  [[ "$val" == *$'\n'* || "$val" == *$'\r'* ]] \
+    && die "${label} for '${host}' contains CR/LF"
+  printf '%s' "$val"
 }
+
+fetch_instance_password() { fetch_instance_secret "$1" 'POSTGRES_APP_PASSWORD'; }
+fetch_instance_cloudflared_token() { fetch_instance_secret "$1" 'CLOUDFLARED_TOKEN'; }
 
 # --- arg parse ---------------------------------------------------------------
 hosts=()
@@ -290,7 +284,10 @@ for host in "${hosts[@]}"; do
   rendered="${rendered//\{\{DESKTOP_USER\}\}/$DESKTOP_USER}"
   rendered="${rendered//\{\{DESKTOP_PASS\}\}/$pass}"
   postgres_app_password="$(fetch_instance_password "$host")"
-  # Fleet-wide tunnel secrets (same for every host; read once above).
+  cloudflared_token="$(fetch_instance_cloudflared_token "$host")"
+  [[ "$cloudflared_token" == *$'\n'* || "$cloudflared_token" == *$'\r'* ]] \
+    && die "CLOUDFLARED_TOKEN for '$host' contains CR/LF"
+  # TUNNEL_SALT is fleet-wide; CLOUDFLARED_TOKEN is now per-instance.
   rendered="${rendered//\{\{TUNNEL_SALT\}\}/$tunnel_salt}"
   rendered="${rendered//\{\{CLOUDFLARED_TOKEN\}\}/$cloudflared_token}"
   rendered="${rendered//\{\{POSTGRES_APP_PASSWORD\}\}/$postgres_app_password}"
@@ -315,5 +312,5 @@ chmod 0600 "$MANIFEST"
 
 echo "clone.sh: ${#hosts[@]} host(s) rendered to $OUT_DIR"
 echo "clone.sh: credential manifest at $MANIFEST (SECRET — gitignored)"
-echo "clone.sh: tunnel secrets source=$TUNNEL_SECRETS_SOURCE (fleet-wide; same salt/token on every box)"
+echo "clone.sh: TUNNEL_SALT fleet-wide (source=$TUNNEL_SECRETS_SOURCE); CLOUDFLARED_TOKEN per-instance from instance-secrets.toml"
 echo "clone.sh: POSTGRES_APP_PASSWORD per-instance from instance-secrets.toml"
