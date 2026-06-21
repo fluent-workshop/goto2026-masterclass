@@ -72,7 +72,22 @@ function getToken(box: string): string {
     ?.[1] ?? '';
 }
 
+// Sidecar written by decode-tunnel-ids.ts (or manually) — avoids needing Tunnel:Read scope
+const TUNNEL_IDS_SIDECAR = resolve(REPO_ROOT, 'infra/tunnel-ids.json');
+let _sidecar: Record<string, string> | null = null;
+function sidecarIds(): Record<string, string> {
+  if (_sidecar) return _sidecar;
+  try { _sidecar = JSON.parse(readFileSync(TUNNEL_IDS_SIDECAR, 'utf8')); } catch { _sidecar = {}; }
+  return _sidecar!;
+}
+
 async function getTunnelId(name: string): Promise<string | null> {
+  // Try sidecar first (no API scope needed)
+  const box = name.replace(/^goto2026-/, '');
+  const fromSidecar = sidecarIds()[box];
+  if (fromSidecar) return fromSidecar;
+
+  // Fall back to API (requires Tunnel:Read scope)
   const data = await cfFetch(
     `/accounts/${ACCOUNT_ID}/cfd_tunnel?name=${encodeURIComponent(name)}&is_deleted=false`,
     CF_TOKEN_PATH
