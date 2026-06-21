@@ -43,6 +43,45 @@ https://dash.cloudflare.com/{account_id}/{zone_name}/dns/records
 - Spantree, LLC account: `7605cf7daffb181f2e6f047fc7183b22`
 - fluentworkshop.dev zone: `9e8e8118df63e27a2163cd4424bdebe1`
 
+## Token extraction — React fiber (preferred)
+
+The token is **truncated in the visible DOM** but the full value lives in React component props. Walk the fiber from the `--token` copy button:
+
+```javascript
+function fiberToken() {
+  const b = Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes('--token'));
+  if (!b) return null;
+  const fk = Object.keys(b).find(k => k.startsWith('__reactFiber') || k.startsWith('__reactInternals'));
+  if (!fk) return null;
+  let n = b[fk];
+  const seen = new Set();
+  for (let i = 0; i < 40 && n; i++) {
+    if (seen.has(n)) break;
+    seen.add(n);
+    const s = (o, d) => {
+      if (!o || d > 3 || typeof o !== 'object') return null;
+      for (const k of Object.keys(o)) {
+        try {
+          const v = o[k];
+          if (typeof v === 'string' && v.length > 80 && v.includes('eyJ')) return v;
+          const r = d < 3 ? s(v, d + 1) : null;
+          if (r) return r;
+        } catch(e) {}
+      }
+      return null;
+    };
+    const r = s(n.memoizedProps, 0) || s(n.pendingProps, 0);
+    if (r) return r.replace(/.*--token\s+/, '').trim();
+    n = n.return;
+  }
+  return null;
+}
+```
+
+Also works from the **edit page** via "Add a connector" — the panel loads the same install instructions with the full token in fiber props. Use this to recover tokens for existing tunnels without recreating them.
+
+> Clipboard hook (`navigator.clipboard.writeText`) also works but requires the user to click; fiber traversal is fully headless.
+
 ## Zero Trust tunnel creation flow
 
 The tunnel creation wizard has 3 steps:
