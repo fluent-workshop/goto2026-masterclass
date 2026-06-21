@@ -32,9 +32,12 @@ Date: 2026-06-20. Branch: `main`.
   `EnvironmentFile=/etc/openclaw/tunnel.env`, `ExecStartPre` renders config,
   `ExecStart` runs token-based `cloudflared … tunnel run --token …` (no cert.pem).
 - First boot: helper renders `/etc/cloudflared/config.yml` with all 7 ingress
-  rules (`-dev` public/no-hash; `-desktop`/`-code-server`/`-supabase-studio`/
-  `-gateway`/`-ssh`/`-postgres` hash-obscured) + the `http_status:404` catch-all.
-  Idempotent via content compare (`cmp`), not blind rewrite.
+  rules, named `${host}-goto2026-*` one label under the apex `fluentworkshop.dev`
+  (`-goto2026-app` public/no-hash; `-goto2026-desktop`/`-code-server`/
+  `-supabase-studio`/`-gateway`/`-ssh`/`-postgres` hash-obscured) + the
+  `http_status:404` catch-all. Idempotent via content compare (`cmp`).
+  DNS is flat per-box CNAMEs (no fleet wildcard); one-label-under-apex names let
+  free Universal SSL `*.fluentworkshop.dev` cover them with no CT-log exposure.
 - **Verified off-box:** renders exactly 8 `service:` lines (7 + catch-all),
   hash derivation matches `sha256sum|cut -c1-8`, second run is a no-op.
 
@@ -97,7 +100,9 @@ Date: 2026-06-20. Branch: `main`.
   a local `config.yml` AND uses `--token`. If a dashboard-managed config takes
   precedence for token connectors on the pinned cloudflared version, move the
   ingress rules into the dashboard (TODO noted in the helper).
-- **Out-of-band DNS:** the wildcard `*.goto26.fluentworkshop.dev` CNAME and the
-  fleet tunnel token are created in Cloudflare outside this loop (per spec).
+- **Out-of-band DNS:** each box's flat per-service `${host}-goto2026-*.fluentworkshop.dev`
+  CNAMEs (to that box's own tunnel, via `cloudflared tunnel route dns`) and the
+  per-box tunnel token are created in Cloudflare outside this loop. No fleet
+  wildcard — that would point every box at one tunnel.
 - Stale memory `tailscale-auth-key-needed.md` is now obsolete (access layer no
   longer uses Tailscale) — flag for cleanup.

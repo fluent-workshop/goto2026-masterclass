@@ -6,12 +6,20 @@
 # salt comes from /etc/openclaw/tunnel.env, which cloud-init drops per instance;
 # until that file exists this exits non-zero and the connector unit stays down.
 #
-# Access model: each service gets a subdomain under goto26.fluentworkshop.dev. A
-# single wildcard `*.goto26.fluentworkshop.dev CNAME <tunnel>.cfargotunnel.com`
-# (created out-of-band) covers them all. PUBLIC services use a bare name; every
-# PROTECTED service is obscured by an 8-hex hash derived from the hostname + a
-# fleet-wide salt, so the URL is unguessable without the salt. Cloudflare
-# terminates TLS at its edge; cloudflared dials the loopback targets below.
+# Access model: each service gets a hostname ONE level under the apex
+# fluentworkshop.dev, with a `-goto2026-` infix. There is NO fleet-wide wildcard
+# CNAME — a wildcard would point every box at one tunnel, which is wrong for
+# per-box tunnels. Instead each box gets explicit FLAT per-service CNAMEs to ITS
+# OWN tunnel, created at clone time with `cloudflared tunnel route dns <tunnel>
+# <hostname>`. PUBLIC services use a bare `-app` name; every PROTECTED service is
+# obscured by an 8-hex hash derived from the hostname + a fleet-wide salt. The
+# "not enumerable" property comes from (a) DNS zones can't be listed/AXFR'd and
+# (b) the hash8 on protected services — NOT from a wildcard. Cloudflare terminates
+# TLS at its edge; cloudflared dials the loopback targets below.
+#
+# TLS: every hostname is exactly one label under the apex, so the free Universal
+# SSL cert (`*.fluentworkshop.dev`) covers them all — individual hostnames never
+# hit Certificate Transparency logs (no per-host cert is ever issued).
 #
 # Token-based connector: the unit runs `cloudflared tunnel run --token …`, so the
 # token (not a cert.pem) supplies the tunnel credentials; this file supplies the
@@ -23,7 +31,7 @@ set -euo pipefail
 ENV_FILE="/etc/openclaw/tunnel.env"
 CONFIG_DIR="/etc/cloudflared"
 CONFIG="$CONFIG_DIR/config.yml"
-DOMAIN_BASE="goto26.fluentworkshop.dev"
+DOMAIN_BASE="fluentworkshop.dev"
 
 # Single source of truth for the hash. hash8 = sha256(hostname + salt)[:8], hex,
 # lowercase. Used for every protected subdomain so the derivation never drifts.
@@ -64,23 +72,23 @@ trap 'rm -f "$tmp"' EXIT
   echo "no-autoupdate: true"
   echo "ingress:"
   # --- Public (no hash): the Vite dev server students share live. ----------
-  echo "  - hostname: ${host}-dev.${DOMAIN_BASE}"
+  echo "  - hostname: ${host}-goto2026-app.${DOMAIN_BASE}"
   echo "    service: http://localhost:3000"
   # --- Protected (hash-obscured) browser services. -------------------------
-  echo "  - hostname: ${host}-desktop-${h}.${DOMAIN_BASE}"
+  echo "  - hostname: ${host}-goto2026-desktop-${h}.${DOMAIN_BASE}"
   echo "    service: http://localhost:8080"
-  echo "  - hostname: ${host}-code-server-${h}.${DOMAIN_BASE}"
+  echo "  - hostname: ${host}-goto2026-code-server-${h}.${DOMAIN_BASE}"
   echo "    service: http://localhost:8088"
-  echo "  - hostname: ${host}-supabase-studio-${h}.${DOMAIN_BASE}"
+  echo "  - hostname: ${host}-goto2026-supabase-studio-${h}.${DOMAIN_BASE}"
   echo "    service: http://localhost:54323"
   # OpenClaw gateway port: default 18789; confirm via `openclaw --help`/docs.
   # TODO(loop-011): verify the gateway listen port on a live box.
-  echo "  - hostname: ${host}-gateway-${h}.${DOMAIN_BASE}"
+  echo "  - hostname: ${host}-goto2026-gateway-${h}.${DOMAIN_BASE}"
   echo "    service: http://localhost:18789"
   # --- Protected non-HTTP services (require the cloudflared client). -------
-  echo "  - hostname: ${host}-ssh-${h}.${DOMAIN_BASE}"
+  echo "  - hostname: ${host}-goto2026-ssh-${h}.${DOMAIN_BASE}"
   echo "    service: ssh://localhost:22"
-  echo "  - hostname: ${host}-postgres-${h}.${DOMAIN_BASE}"
+  echo "  - hostname: ${host}-goto2026-postgres-${h}.${DOMAIN_BASE}"
   echo "    service: tcp://localhost:54322"
   # --- Mandatory catch-all: anything unmatched gets a 404, never a default. -
   echo "  - service: http_status:404"

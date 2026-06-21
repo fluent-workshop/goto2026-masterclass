@@ -183,22 +183,27 @@ Then every instance reports healthy
 ### FR-5: Cloudflare Tunnel access for live demo (GOT-39)
 
 Each box runs one `cloudflared` connector (baked, enabled) whose ingress rules
-route hash-obscured subdomains under `goto26.fluentworkshop.dev` to local
-services (noVNC desktop, code-server, Supabase Studio, the OpenClaw gateway, SSH,
-Postgres). Cloudflare terminates TLS at its edge; nothing listens on a public
-interface. The instructor and students reach any box by browser URL — no client
-install for the HTTP services, the `cloudflared` client for SSH/Postgres — without
-per-box public-IP juggling. The token + salt are injected per instance via
-cloud-init (`/etc/openclaw/tunnel.env`); the per-box `config.yml` is rendered at
-first boot. Independent of the bake chain. (See loop-011.)
+route `${host}-goto2026-*` hostnames — one label under the apex
+`fluentworkshop.dev`, protected ones hash-obscured — to local services (noVNC
+desktop, code-server, Supabase Studio, the OpenClaw gateway, SSH, Postgres).
+Cloudflare terminates TLS at its edge; nothing listens on a public interface. The
+instructor and students reach any box by browser URL — no client install for the
+HTTP services, the `cloudflared` client for SSH/Postgres — without per-box
+public-IP juggling. The token + salt are injected per instance via cloud-init
+(`/etc/openclaw/tunnel.env`); the per-box `config.yml` is rendered at first boot.
+DNS is NOT a fleet wildcard (that points every box at one tunnel); each box gets
+explicit flat per-service CNAMEs to its OWN tunnel via `cloudflared tunnel route
+dns` at clone time. Keeping every hostname one label under the apex lets the free
+Universal SSL cert (`*.fluentworkshop.dev`) cover them, so no per-host cert hits
+Certificate Transparency logs. Independent of the bake chain. (See loop-011.)
 
 **Acceptance criteria:**
 
 ```gherkin
 Given the instances are provisioned with their tunnel token + salt
 When the openclaw-tunnel.service connector starts on first boot
-Then each box's services are reachable at their goto26.fluentworkshop.dev subdomains
-  And public services (the dev server) use a bare name
+Then each box's services are reachable at their ${host}-goto2026-* fluentworkshop.dev hostnames
+  And public services (the dev server) use a bare -goto2026-app name
   And protected services are obscured by the hostname-derived hash
 ```
 
@@ -338,7 +343,7 @@ Then the agent's working dirs / config reset to the golden baseline
 - **Region/type** — `ccx33` (x86, 8 **dedicated** vCPU / 32GB / 240GB NVMe) in `ash` — confirmed available via Hetzner API 2026-06-19, €0.266/hr. Supersedes the earlier `cpx21`/`cx22` (both undersized for the lab stack). NOTE: an earlier PRD draft labeled this "CCX43" next to 8 vCPU / 32GB specs — that was a mislabel; 8 vCPU / 32GB / 240GB is `ccx33`. `ccx43` is the larger 16 vCPU / 64GB SKU.
 - **openclaw** — pinned `2026.6.5` (Cedric's known-good build).
 - **Node** — 22 LTS via mise.
-- **Cloudflare** — `fluentworkshop.dev` zone; a fleet `cloudflared` tunnel token + a wildcard `*.goto26.fluentworkshop.dev` CNAME (out-of-band). `CLOUDFLARED_TOKEN` + `TUNNEL_SALT` injected via cloud-init (source from 1Password).
+- **Cloudflare** — `fluentworkshop.dev` zone; a per-box `cloudflared` tunnel + token; flat per-service `${host}-goto2026-*.fluentworkshop.dev` CNAMEs to each box's own tunnel, created out-of-band via `cloudflared tunnel route dns` (NOT a fleet wildcard). `CLOUDFLARED_TOKEN` + `TUNNEL_SALT` injected via cloud-init (source from 1Password).
 - **1Password** — `EVIE - Hetzner GOTO 2026 API KEY` + per-instance OpenClaw keys.
 
 ---
@@ -392,7 +397,7 @@ Then the agent's working dirs / config reset to the golden baseline
 | 2026-06-19 | Instance size corrected: `ccx33` (8 dedicated vCPU / 32GB / 240GB NVMe) per PRD §6 + Cedric. Fixed the stale 4GB/`cpx21` references and the "CCX43" SKU mislabel (8 vCPU/32GB = ccx33, not ccx43). | Evie |
 | 2026-06-19 | loop-004 reconciliation vs canonical Notion PRD-001 v1.1: repo is a lean headless box; canonical spec is a full graphical lab (~6 of 9 FRs absent). Path 2 (hybrid, sequenced MVP-first) chosen. | Evie |
 | 2026-06-19 | **4 blocking decisions resolved (Cedric):** (1) browser desktop **IN** — Xfce+noVNC+nginx basic-auth baked, per-student auth over the public access layer; (2) Anthropic **org sub-keys** — provisioned via admin API, per-key spend caps, revoked at teardown; (3) Discord **new dedicated server** — 14 channels + roles + per-student bot, nuked at teardown; (4) the public access layer + gateway auth **verified on the first Hetzner box** as a pass/fail gate before snapshot (access layer later switched to Cloudflare Tunnels — see 2026-06-20 below). | Evie |
-| 2026-06-20 | **Access layer switched to Cloudflare Tunnels (loop-011).** Replaces the earlier VPN-based access approach: each box runs one baked `cloudflared` connector routing hash-obscured `*.goto26.fluentworkshop.dev` subdomains to local services (noVNC desktop, code-server, Supabase Studio, gateway, SSH, Postgres); Cloudflare terminates TLS at its edge. Token-based connector (no cert.pem); `CLOUDFLARED_TOKEN` + `TUNNEL_SALT` injected via cloud-init. code-server added to the bake. FR-5 + dependencies updated accordingly. | loop-011 |
+| 2026-06-20 | **Access layer switched to Cloudflare Tunnels (loop-011).** Replaces the earlier VPN-based access approach: each box runs one baked `cloudflared` connector routing `${host}-goto2026-*.fluentworkshop.dev` hostnames (one label under the apex; protected ones hash-obscured) to local services (noVNC desktop, code-server, Supabase Studio, gateway, SSH, Postgres); Cloudflare terminates TLS at its edge. Token-based connector (no cert.pem); `CLOUDFLARED_TOKEN` + `TUNNEL_SALT` injected via cloud-init. Flat per-box CNAMEs (no fleet wildcard) so free Universal SSL covers them. code-server added to the bake. FR-5 + dependencies updated accordingly. | loop-011 |
 
 ---
 
@@ -401,6 +406,6 @@ Then the agent's working dirs / config reset to the golden baseline
 1. On the bake box, run `sudo -u ubuntu env -i openclaw --version` (stripped env) → confirms shim resolution without `mise activate`.
 2. `terraform plan` on the clone config shows exactly 14 to add, 0 to change, from the snapshot image ID.
 3. After clone, `infra/verify.sh` prints 14/14 green; intentionally break one box and confirm it's named in the failure summary.
-4. `ssh <host>-ssh-<hash>.goto26.fluentworkshop.dev` (via the `cloudflared` client) reaches a box by name (not IP) for at least 3 random instances.
+4. `ssh <host>-goto2026-ssh-<hash>.fluentworkshop.dev` (via the `cloudflared` client) reaches a box by name (not IP) for at least 3 random instances.
 5. Wedge a box (corrupt `~/.openclaw/config`), run `infra/reset.sh <hostname>`, confirm agent works and elapsed < 2 min.
 6. `git grep -nE '(hcloud|api[_-]?key|token)' -- . ':!*.lock.hcl'` returns no secret values in tracked files.

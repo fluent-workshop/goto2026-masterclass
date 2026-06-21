@@ -340,10 +340,18 @@ phase_desktop() {
 
 # ---- phase_tunnel: Cloudflare Tunnel connector (cloudflared) ---------------
 # Replaces the prior VPN-fronted access model. Each box runs ONE cloudflared
-# daemon whose ingress rules route hash-obscured subdomains under
-# goto26.fluentworkshop.dev to local services (noVNC desktop, code-server,
-# Supabase Studio, the OpenClaw gateway, SSH, Postgres). Cloudflare terminates
-# TLS at its edge, so nothing here listens on a public interface.
+# daemon whose ingress rules route `${host}-goto2026-*` hostnames (one label
+# under the apex fluentworkshop.dev, protected ones hash-obscured) to local
+# services (noVNC desktop, code-server, Supabase Studio, the OpenClaw gateway,
+# SSH, Postgres). Cloudflare terminates TLS at its edge, so nothing here listens
+# on a public interface.
+#
+# DNS: there is NO fleet-wide wildcard CNAME (a wildcard points every box at one
+# tunnel — wrong for per-box tunnels). Each box gets explicit FLAT per-service
+# CNAMEs to ITS OWN tunnel, created at clone time via `cloudflared tunnel route
+# dns <tunnel> <hostname>`. Hostnames sit one label under the apex so the free
+# Universal SSL cert (`*.fluentworkshop.dev`) covers them and no per-host cert
+# ever hits Certificate Transparency logs.
 #
 # Bake time (this phase) lays down ONLY the connector binary, a config-generator
 # helper, and the systemd unit — all generic. The per-box config.yml is rendered
