@@ -1,0 +1,55 @@
+#cloud-config
+# Per-instance cloud-init template for GOTO 2026 student VPS.
+# The placeholders HOSTNAME, OPENCLAW_API_KEY, DESKTOP_USER and DESKTOP_PASS
+# (each wrapped in double braces below) are substituted by infra/clone.sh at
+# create time, per row in instances.txt.
+#
+# This is the ONLY per-instance layer. Everything else comes from the
+# golden snapshot, so each box differs only by name + its injected secrets.
+#
+# Agent user (m5): this lab is Ubuntu-only. The agent user is the stock Ubuntu
+# cloud-image `ubuntu` account, so the paths and `sudo -u` below hardcode
+# `ubuntu` deliberately. bootstrap.sh pins AGENT_USER=ubuntu (no longer env-
+# overridable) precisely so this cloud-init layer and the bake never disagree on
+# who the agent user is. Supporting a different user would mean threading
+# AGENT_USER through clone.sh into these placeholders too; out of scope here.
+
+hostname: {{HOSTNAME}}
+preserve_hostname: false
+
+write_files:
+  # Per-instance OpenClaw API key, root-readable only, owned by the agent user.
+  # base64-encoded (M3): clone.sh emits the key as a single b64 line, so a key
+  # with embedded newlines or leading YAML sigils (`{`, `|`, `>`) can never
+  # corrupt this block or inject adjacent keys. cloud-init decodes it back to the
+  # raw key on the box. clone.sh additionally rejects CR/LF in the key up front.
+  - path: /home/ubuntu/.openclaw/credentials/api-key
+    owner: ubuntu:ubuntu
+    permissions: '0600'
+    encoding: b64
+    content: "{{OPENCLAW_API_KEY_B64}}"
+
+  # Per-instance desktop basic-auth credential consumed at first boot by the
+  # baked openclaw-desktop-cred.service (After=cloud-final), which turns it into
+  # the nginx bcrypt htpasswd. Secret: root:root 0600. write_files runs in the
+  # cloud-init config stage, well before cloud-final, so the file is present when
+  # the cred unit fires. Absent => nginx fails closed (401); never baked into the
+  # snapshot, only injected here per instance.
+  - path: /etc/openclaw/desktop.env
+    owner: root:root
+    permissions: '0600'
+    content: |
+      DESKTOP_USER="{{DESKTOP_USER}}"
+      DESKTOP_PASS="{{DESKTOP_PASS}}"
+
+runcmd:
+  # Make the hostname stick for prompts/support ("Pikachu is wedged").
+  # Quoted so a hostname is never word-split or shell-interpreted here; clone.sh
+  # additionally validates {{HOSTNAME}} against RFC 1123 before substitution (M2).
+  - hostnamectl set-hostname "{{HOSTNAME}}"
+  - sed -i "s/127.0.1.1.*/127.0.1.1 {{HOSTNAME}}/" /etc/hosts || true
+  # Sanity self-check on first boot. Keep `|| true` so a doctor failure never
+  # blocks cloud-init, but capture its output for debugging instead of discarding
+  # it (m3). The `|| true` runs the whole redirected command, so the log is always
+  # written. Runs as `ubuntu` to match the bake's agent user (see note above).
+  - sudo -u ubuntu openclaw doctor > /var/log/openclaw-doctor.log 2>&1 || true
