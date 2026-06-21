@@ -1,0 +1,21 @@
+[Unit]
+Description=OpenClaw classroom code-server (VS Code in the browser, loopback:8088)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Bound to loopback only — the cloudflared connector (openclaw-tunnel.service)
+# fronts 8088 over a hash-obscured subdomain and is the only externally reachable
+# hop. code-server's OWN auth is OFF: the unguessable cloudflared URL is the gate,
+# matching the desktop's model. Telemetry off; runs as the agent user.
+Type=exec
+User=ubuntu
+Group=ubuntu
+Environment=HOME=/home/ubuntu
+WorkingDirectory=/home/ubuntu
+ExecStart=/usr/bin/code-server --bind-addr 127.0.0.1:8088 --auth none --disable-telemetry
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

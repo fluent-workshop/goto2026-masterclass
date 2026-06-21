@@ -1,8 +1,11 @@
 #cloud-config
 # Per-instance cloud-init template for GOTO 2026 student VPS.
-# The placeholders HOSTNAME, OPENCLAW_API_KEY, DESKTOP_USER and DESKTOP_PASS
-# (each wrapped in double braces below) are substituted by infra/clone.sh at
-# create time, per row in instances.txt.
+# The placeholders HOSTNAME, OPENCLAW_API_KEY, DESKTOP_USER, DESKTOP_PASS,
+# TUNNEL_SALT, CLOUDFLARED_TOKEN and POSTGRES_APP_PASSWORD (each wrapped in
+# double braces below) are substituted by infra/clone.sh at create time, per row
+# in instances.txt. TUNNEL_SALT / CLOUDFLARED_TOKEN / POSTGRES_APP_PASSWORD are
+# fleet-wide (the same value for every box; only the hostname varies the tunnel
+# hash), so clone.sh reads them once rather than generating them per host.
 #
 # This is the ONLY per-instance layer. Everything else comes from the
 # golden snapshot, so each box differs only by name + its injected secrets.
@@ -41,6 +44,21 @@ write_files:
     content: |
       DESKTOP_USER="{{DESKTOP_USER}}"
       DESKTOP_PASS="{{DESKTOP_PASS}}"
+
+  # Cloudflare Tunnel secrets, consumed at first boot by the baked
+  # openclaw-tunnel.service: TUNNEL_SALT seeds the per-box subdomain hash (see
+  # openclaw-tunnel-config.sh), CLOUDFLARED_TOKEN authenticates the connector to
+  # Cloudflare's edge. POSTGRES_APP_PASSWORD is injected now for a later loop that
+  # wires the companion app's Postgres role. Secret: root:root 0600. Unlike the
+  # desktop credential this file is NOT consumed/deleted — the connector reads the
+  # token on every boot. All three are fleet-wide; never baked into the snapshot.
+  - path: /etc/openclaw/tunnel.env
+    owner: root:root
+    permissions: '0600'
+    content: |
+      TUNNEL_SALT="{{TUNNEL_SALT}}"
+      CLOUDFLARED_TOKEN="{{CLOUDFLARED_TOKEN}}"
+      POSTGRES_APP_PASSWORD="{{POSTGRES_APP_PASSWORD}}"
 
 runcmd:
   # Make the hostname stick for prompts/support ("Pikachu is wedged").

@@ -33,6 +33,14 @@ MISE_VERSION="${MISE_VERSION:-v2026.6.11}"           # exact mise release tag (g
 # SHASUMS256.txt. MUST be updated together with MISE_VERSION — a mismatch
 # fails the bake loudly rather than installing an unverified binary.
 MISE_SHA256="${MISE_SHA256:-4c1036af15efea3a4d83f13481132ec7d7dda15e7ec5869dd70a64072bf1a6c9}"
+# code-server (VS Code in the browser, FR-4) — pinned .deb from the upstream
+# GitHub release. Bump deliberately; confirm the tag exists at
+# https://github.com/coder/code-server/releases (TODO: verify the exact pin).
+CODE_SERVER_VERSION="${CODE_SERVER_VERSION:-4.100.3}"
+# cloudflared (Cloudflare Tunnel connector) — pinned .deb from the upstream
+# GitHub release. Bump deliberately; confirm the tag exists at
+# https://github.com/cloudflare/cloudflared/releases (TODO: verify the exact pin).
+CLOUDFLARED_VERSION="${CLOUDFLARED_VERSION:-2025.11.1}"
 # This lab is Ubuntu-only: the agent user is the stock Ubuntu cloud-image
 # `ubuntu` account (passwordless sudo + injected SSH key already present). It is
 # intentionally NOT env-overridable (m5) — the cloud-init layer hardcodes
@@ -73,10 +81,10 @@ as_agent() {
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # The bake copies on-disk assets: the shell profiles (shell/), the desktop
-# units + nginx site (desktop/), and the Docker service stack (infra/services/).
-# A curl|bash or partial checkout leaves these absent → a silently broken box.
-# Require them all up front.
-for _need in "$SCRIPT_DIR/shell" "$SCRIPT_DIR/desktop" "$REPO_ROOT/infra/services"; do
+# units + nginx site (desktop/), the Cloudflare Tunnel helper + unit (tunnel/),
+# and the Docker service stack (infra/services/). A curl|bash or partial checkout
+# leaves these absent → a silently broken box. Require them all up front.
+for _need in "$SCRIPT_DIR/shell" "$SCRIPT_DIR/desktop" "$SCRIPT_DIR/tunnel" "$REPO_ROOT/infra/services"; do
   if [[ ! -d "$_need" ]]; then
     echo "FATAL: '$_need' not found." >&2
     echo "Run from a repo checkout (git clone … && bash dotfiles/bootstrap.sh)," >&2
@@ -248,11 +256,12 @@ phase_desktop() {
   # ---- 8. Browser desktop: Xfce + TigerVNC + noVNC + nginx auth (FR-4) -------
   # The lab's heaviest bake-once layer. Chain: Xfce session on a loopback-only
   # TigerVNC display (:1) → websockify bridges VNC to a browser WebSocket (6080,
-  # loopback) → nginx reverse-proxies 8080 with HTTP basic-auth. Tailscale Funnel
-  # (a later loop) fronts 8080 and terminates TLS; here we only make the local
-  # chain correct. The per-student htpasswd is NOT baked — it's written at first
-  # boot by openclaw-desktop-cred.service from a cloud-init-dropped credential, so
-  # the snapshot carries no secret and nginx fails closed until creds land.
+  # loopback) → nginx reverse-proxies 8080 with HTTP basic-auth. The cloudflared
+  # connector (phase_tunnel) fronts 8080 over a Cloudflare Tunnel and terminates
+  # TLS at Cloudflare's edge; here we only make the local chain correct. The
+  # per-student htpasswd is NOT baked — it's written at first boot by
+  # openclaw-desktop-cred.service from a cloud-init-dropped credential, so the
+  # snapshot carries no secret and nginx fails closed until creds land.
   log "Installing desktop stack (Xfce + TigerVNC + noVNC + nginx)"
   apt-get install -y -qq \
     xfce4 xfce4-terminal dbus-x11 \
@@ -270,12 +279,40 @@ phase_desktop() {
     install -m 0644 "$SCRIPT_DIR/desktop/$unit.service" "/etc/systemd/system/$unit.service"
   done
 
+  # ---- code-server (VS Code in the browser, loopback:8088) ------------------
+  # Installed from the pinned upstream .deb (a version-pinned network fetch at
+  # bake, exactly like Docker's repo packages — NOT the live `curl … | sh`
+  # installer, whose resolved version drifts). code-server is NOT fronted by the
+  # noVNC nginx block: phase_tunnel gives it its own cloudflared ingress straight
+  # to 127.0.0.1:8088. Its own auth is OFF (--auth none) — the hash-obscured
+  # cloudflared subdomain is the gate, matching the desktop's basic-auth model.
+  _cs_installed=""
+  if command -v code-server >/dev/null 2>&1; then
+    _cs_installed="$(code-server --version 2>/dev/null | awk 'NR==1{print $1}')" || true
+  fi
+  if [[ "$_cs_installed" != "$CODE_SERVER_VERSION" ]]; then
+    log "Installing code-server ${CODE_SERVER_VERSION} (pinned .deb)"
+    _cs_deb="$(mktemp --suffix=.deb)"
+    curl -fsSL -o "$_cs_deb" \
+      "https://github.com/coder/code-server/releases/download/v${CODE_SERVER_VERSION}/code-server_${CODE_SERVER_VERSION}_amd64.deb"
+    apt-get install -y -qq "$_cs_deb"
+    rm -f "$_cs_deb"
+  else
+    log "code-server ${CODE_SERVER_VERSION} already present — skipping"
+  fi
+  install -m 0644 "$SCRIPT_DIR/desktop/openclaw-code-server.service" \
+    /etc/systemd/system/openclaw-code-server.service
+
   log "Configuring nginx basic-auth reverse proxy for noVNC"
   # Auth-gated landing page served at `/` (static, so basic-auth applies — see the
-  # nginx site for why this isn't a `return 302`). JS-redirects into noVNC.
+  # nginx site for why this isn't a `return 302`). JS-redirects into noVNC. The
+  # offline.html page backs the reusable @offline named location (fail-fast 503),
+  # so a dead backend renders a friendly page instead of hanging.
   install -d -m 0755 /usr/share/openclaw-desktop
   install -m 0644 "$SCRIPT_DIR/desktop/index.html" \
     /usr/share/openclaw-desktop/index.html
+  install -m 0644 "$SCRIPT_DIR/desktop/offline.html" \
+    /usr/share/openclaw-desktop/offline.html
   install -m 0644 "$SCRIPT_DIR/desktop/openclaw-desktop.nginx" \
     /etc/nginx/sites-available/openclaw-desktop
   ln -sf /etc/nginx/sites-available/openclaw-desktop \
@@ -287,7 +324,7 @@ phase_desktop() {
   # the real box's boot. None of this pulls or spends.
   systemctl daemon-reload
   systemctl enable openclaw-desktop-vnc.service openclaw-desktop-novnc.service \
-    openclaw-desktop-cred.service nginx
+    openclaw-desktop-cred.service openclaw-code-server.service nginx
 
   # The nginx apt package starts a daemon at install time with the STOCK config —
   # before our site existed. Enabling alone leaves that running daemon listening on
@@ -297,6 +334,61 @@ phase_desktop() {
   # restart, not reload: a new `listen 8080` is picked up cleanly on a full restart.
   # It fails closed (no htpasswd yet) so starting it exposes nothing.
   systemctl restart nginx
+
+  touch "$BAKE_STAMP_DIR/${FUNCNAME[0]}.done"
+}
+
+# ---- phase_tunnel: Cloudflare Tunnel connector (cloudflared) ---------------
+# Replaces the prior VPN-fronted access model. Each box runs ONE cloudflared
+# daemon whose ingress rules route hash-obscured subdomains under
+# goto26.fluentworkshop.dev to local services (noVNC desktop, code-server,
+# Supabase Studio, the OpenClaw gateway, SSH, Postgres). Cloudflare terminates
+# TLS at its edge, so nothing here listens on a public interface.
+#
+# Bake time (this phase) lays down ONLY the connector binary, a config-generator
+# helper, and the systemd unit — all generic. The per-box config.yml is rendered
+# at FIRST BOOT by the helper from /etc/openclaw/tunnel.env (cloud-init-injected
+# TUNNEL_SALT + CLOUDFLARED_TOKEN), so the snapshot carries no secret and no
+# host-specific config. Token-based connector model: no cert.pem on the box.
+phase_tunnel() {
+  if [[ "$FORCE" -ne 1 && -f "$BAKE_STAMP_DIR/${FUNCNAME[0]}.done" && "${FUNCNAME[0]}" != "$SELECTED_PHASE" ]]; then
+    log "${FUNCNAME[0]} already done (stamp present) — skipping"
+    return 0
+  fi
+
+  # Install cloudflared from the pinned upstream .deb (version-pinned network
+  # fetch at bake, like Docker's packages — not a live install script). Guarded
+  # on an exact version match so a re-bake doesn't refetch over the network.
+  _cfd_installed=""
+  if command -v cloudflared >/dev/null 2>&1; then
+    # `cloudflared --version` prints e.g. "cloudflared version 2025.11.1 (built …)"
+    _cfd_installed="$(cloudflared --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)" || true
+  fi
+  if [[ "$_cfd_installed" != "$CLOUDFLARED_VERSION" ]]; then
+    log "Installing cloudflared ${CLOUDFLARED_VERSION} (pinned .deb)"
+    _cfd_deb="$(mktemp --suffix=.deb)"
+    curl -fsSL -o "$_cfd_deb" \
+      "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64.deb"
+    apt-get install -y -qq "$_cfd_deb"
+    rm -f "$_cfd_deb"
+  else
+    log "cloudflared ${CLOUDFLARED_VERSION} already present — skipping"
+  fi
+
+  # First-boot config generator + connector unit. The helper holds the single
+  # hash8 function and the ingress-rule template; the unit renders the config
+  # (ExecStartPre) then runs the connector. Neither is host-specific at bake.
+  log "Installing cloudflared config helper + connector unit"
+  install -m 0755 "$SCRIPT_DIR/tunnel/openclaw-tunnel-config.sh" \
+    /usr/local/sbin/openclaw-tunnel-config.sh
+  install -m 0644 "$SCRIPT_DIR/tunnel/openclaw-tunnel.service" \
+    /etc/systemd/system/openclaw-tunnel.service
+
+  # NOTE: we do NOT render /etc/cloudflared/config.yml here — it is first-boot
+  # generated from the cloud-init salt/token (phase_verify asserts it is absent
+  # at bake). Enable the unit so it comes up on every real boot.
+  systemctl daemon-reload
+  systemctl enable openclaw-tunnel.service
 
   touch "$BAKE_STAMP_DIR/${FUNCNAME[0]}.done"
 }
@@ -408,10 +500,10 @@ phase_verify() {
   log "Validating nginx config (nginx -t)"
   nginx -t
 
-  # Assert nginx binds 8080 on loopback only (C1): Tailscale Funnel proxies
-  # localhost, so a public 8080 listener would expose noVNC + basic-auth in
-  # cleartext if a firewall ever gapped. ss column 4 is Local Address:Port; any
-  # :8080 listener that is not 127.0.0.1/[::1] fails the bake.
+  # Assert nginx binds 8080 on loopback only (C1): the cloudflared connector
+  # proxies localhost, so a public 8080 listener would expose noVNC + basic-auth
+  # in cleartext if a firewall ever gapped. ss column 4 is Local Address:Port;
+  # any :8080 listener that is not 127.0.0.1/[::1] fails the bake.
   log "Asserting nginx binds 8080 on loopback only"
   _bad_8080="$(ss -ltnH 2>/dev/null | awk '{print $4}' | grep ':8080$' | grep -vE '^(127\.0\.0\.1|\[::1\]):' || true)"
   if [[ -n "$_bad_8080" ]]; then
@@ -426,9 +518,34 @@ phase_verify() {
   SONAR_DB_PASSWORD=bake-validation-only \
     docker compose -f /opt/openclaw/services/compose.yml config -q
 
+  # ---- Cloudflare Tunnel layer (cloudflared + code-server) ------------------
+  log "Asserting cloudflared is installed"
+  command -v cloudflared >/dev/null 2>&1 || {
+    echo "FATAL: cloudflared not installed (phase_tunnel)." >&2
+    exit 1
+  }
+
+  # The per-box tunnel config is FIRST-BOOT generated from the cloud-init
+  # salt/token — the bake must NOT have rendered it (no host-specific data, no
+  # secret, in the snapshot). Its presence here means a leak or a misordered bake.
+  log "Asserting /etc/cloudflared/config.yml is absent at bake (first-boot generated)"
+  if [[ -e /etc/cloudflared/config.yml ]]; then
+    echo "FATAL: /etc/cloudflared/config.yml exists at bake; it must be first-boot generated." >&2
+    exit 1
+  fi
+
+  # code-server is enabled but NOT started at bake (it binds 8088 on first boot).
+  # Assert the binary installed; the unit-enabled check below covers boot-time.
+  log "Asserting code-server is installed"
+  command -v code-server >/dev/null 2>&1 || {
+    echo "FATAL: code-server not installed (phase_desktop)." >&2
+    exit 1
+  }
+
   log "Confirming lab units are enabled (not started here)"
   systemctl is-enabled openclaw-desktop-vnc.service openclaw-desktop-novnc.service \
-    openclaw-desktop-cred.service openclaw-services.service nginx
+    openclaw-desktop-cred.service openclaw-code-server.service \
+    openclaw-tunnel.service openclaw-services.service nginx
 
   touch "$BAKE_STAMP_DIR/${FUNCNAME[0]}.done"
 }
@@ -437,7 +554,7 @@ phase_verify() {
 # A full bake runs every phase in order (skipping any already stamped done). A
 # `--phase <name>` run executes only that phase and forces it (bypasses its
 # stamp). `--force` re-runs every phase, ignoring all stamps.
-ALL_PHASES=(phase_base phase_toolchain phase_desktop phase_docker phase_verify)
+ALL_PHASES=(phase_base phase_toolchain phase_desktop phase_tunnel phase_docker phase_verify)
 
 SELECTED_PHASE="${SELECTED_PHASE:-}"
 FORCE=0

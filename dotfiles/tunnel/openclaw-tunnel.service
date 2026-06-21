@@ -1,0 +1,27 @@
+[Unit]
+Description=OpenClaw Cloudflare Tunnel connector (cloudflared, per-box ingress)
+Documentation=https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/
+# Needs the network up to reach Cloudflare's edge. The config + token both arrive
+# via cloud-init at first boot; ExecStartPre renders config.yml from the salt.
+After=network-online.target
+Wants=network-online.target
+# Don't hammer Cloudflare's edge if creds are bad — back off after repeated fails.
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+# Token + salt live in the cloud-init-injected env file (root:root 0600). Unlike
+# the desktop credential this is NOT consumed/deleted — the connector needs the
+# token on every boot. Absent => ExecStartPre fails => connector stays down.
+EnvironmentFile=/etc/openclaw/tunnel.env
+# Render this box's ingress config (idempotent) before connecting.
+ExecStartPre=/usr/local/sbin/openclaw-tunnel-config.sh
+# Token-based connector: the token supplies tunnel credentials (no cert.pem on
+# the box); config.yml supplies the ingress rules.
+ExecStart=/usr/bin/cloudflared --no-autoupdate --config /etc/cloudflared/config.yml tunnel run --token ${CLOUDFLARED_TOKEN}
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

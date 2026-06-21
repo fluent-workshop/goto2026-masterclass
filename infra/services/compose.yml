@@ -38,7 +38,7 @@ services:
       SONAR_JDBC_USERNAME: sonar
       SONAR_JDBC_PASSWORD: ${SONAR_DB_PASSWORD:?SONAR_DB_PASSWORD must be set (see .env)}
     # Loopback-only: the agent and the local code-review skill reach SonarQube at
-    # 127.0.0.1:9000. Not exposed publicly (no Funnel route to it).
+    # 127.0.0.1:9000. Not exposed publicly (no cloudflared ingress route to it).
     ports:
       - "127.0.0.1:9000:9000"
     volumes:

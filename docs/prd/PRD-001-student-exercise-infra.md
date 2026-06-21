@@ -25,7 +25,7 @@ canonical 14-name roster (`instances.txt`), a `dotfiles/bootstrap.sh` bake scrip
 a per-instance `cloud-init` template, and a plan-only Terraform skeleton for a
 single bake-test server (loop-001, complete and green). What's missing is the
 end-to-end golden-image pipeline, the clone-14 Terraform, key injection, the verify
-pass, the tailnet for the live demo, and the reset script — plus this PRD to anchor
+pass, the Cloudflare Tunnel access layer for the live demo, and the reset script — plus this PRD to anchor
 the decisions already made so they don't get relearned.
 
 The hard gate: everything must be **provisioned and verified before the M1 dry-run
@@ -82,7 +82,7 @@ reproducibility and speed over long-term fleet management.
 2. **Clone 14** — Terraform `for_each` over `instances.txt` from the snapshot (GOT-36).
 3. **Per-instance key injection** — cloud-init writes each box's API key at clone time (GOT-37).
 4. **Verify pass** — `openclaw doctor` green on every instance (GOT-38).
-5. **Tailnet** — all 14 reachable on the tailnet for the live demo (GOT-39).
+5. **Tunnel access** — all 14 reachable via per-box Cloudflare Tunnel subdomains for the live demo (GOT-39).
 6. **Reset-to-clean** — `infra/reset.sh` restores a wedged instance without re-bake (GOT-40).
 7. **Classroom shell profile** — stripped zsh forked from Cedric's Ubuntu dotfiles variant.
 8. **Node via mise** — with shims wired into `/usr/local/bin` for non-interactive contexts.
@@ -180,18 +180,26 @@ Then every instance reports healthy
 **Files:**
 - `infra/verify.sh` — loops the roster, SSHes, runs doctor, summarizes.
 
-### FR-5: Tailnet access for live demo (GOT-39)
+### FR-5: Cloudflare Tunnel access for live demo (GOT-39)
 
-All 14 instances join the tailnet so the instructor can reach any box during the
-live demo without per-box public-IP juggling. Independent of the bake chain.
+Each box runs one `cloudflared` connector (baked, enabled) whose ingress rules
+route hash-obscured subdomains under `goto26.fluentworkshop.dev` to local
+services (noVNC desktop, code-server, Supabase Studio, the OpenClaw gateway, SSH,
+Postgres). Cloudflare terminates TLS at its edge; nothing listens on a public
+interface. The instructor and students reach any box by browser URL — no client
+install for the HTTP services, the `cloudflared` client for SSH/Postgres — without
+per-box public-IP juggling. The token + salt are injected per instance via
+cloud-init (`/etc/openclaw/tunnel.env`); the per-box `config.yml` is rendered at
+first boot. Independent of the bake chain. (See loop-011.)
 
 **Acceptance criteria:**
 
 ```gherkin
-Given the instances are provisioned
-When tailnet onboarding runs (pre-auth key baked or injected at clone)
-Then each instance appears on the tailnet under its hostname
-  And the instructor can SSH to any instance by tailnet name
+Given the instances are provisioned with their tunnel token + salt
+When the openclaw-tunnel.service connector starts on first boot
+Then each box's services are reachable at their goto26.fluentworkshop.dev subdomains
+  And public services (the dev server) use a bare name
+  And protected services are obscured by the hostname-derived hash
 ```
 
 ### FR-6: Reset-to-clean script (GOT-40)
@@ -238,7 +246,7 @@ Then the agent's working dirs / config reset to the golden baseline
 | mise shims not resolving in systemd/non-interactive context | Medium | Medium | Symlink shims into `/usr/local/bin`; verify with a non-login `openclaw --version`. |
 | Hetzner capacity/quota blocks 14-server create | High | Low | Pre-flight quota check (GOT-43) before clone apply. |
 | Per-instance key mix-up (wrong key on wrong box) | Medium | Low | Drive injection from one roster→key map; verify in FR-3 acceptance. |
-| Tight timeline (2 days) | High | Medium | Parallelize: GOT-39 (tailnet) runs independent of the bake chain. |
+| Tight timeline (2 days) | High | Medium | Parallelize: GOT-39 (tunnel access) runs independent of the bake chain. |
 
 ### Assumptions
 
@@ -288,11 +296,11 @@ Then the agent's working dirs / config reset to the golden baseline
 
 **Options considered:**
 1. Restore agent working dirs/config from a baked baseline tarball (fast, in-place).
-2. Destroy + recreate the server from snapshot (clean but slower, new IP/tailnet churn).
+2. Destroy + recreate the server from snapshot (clean but slower, new IP / tunnel re-onboarding churn).
 
 **Decision:** Default to in-place agent-state restore in `reset.sh`; keep rebuild-from-snapshot as the escalation path.
 
-**Rationale:** In-place reset hits the <2-min target and avoids tailnet/IP churn mid-class. Rebuild stays available for a truly bricked box.
+**Rationale:** In-place reset hits the <2-min target and avoids tunnel/IP churn mid-class. Rebuild stays available for a truly bricked box.
 
 ### D5: Hostname roster — spellable Gen-1 names
 
@@ -316,9 +324,9 @@ Then the agent's working dirs / config reset to the golden baseline
 | `infra/terraform/main.tf` | Modify | FR-2 | `for_each` over roster from single test server. |
 | `infra/terraform/clone.tf` | New | FR-2 | 14-clone config from snapshot image. |
 | `infra/clone.sh` | New | FR-2, FR-3 | Render cloud-init per row (hostname + key). |
-| `infra/cloud-init/template.yaml` | Modify | FR-3 | Confirm key path/permissions; tailnet hook. |
+| `infra/cloud-init/template.yaml` | Modify | FR-3 | Confirm key path/permissions; tunnel.env (salt/token) hook. |
 | `infra/verify.sh` | New | FR-4 | SSH each instance, run doctor, summarize. |
-| `infra/tailnet.sh` | New | FR-5 | Onboard instances to tailnet by hostname. |
+| `dotfiles/tunnel/` | New | FR-5 | cloudflared connector: config helper + unit baked; per-box `config.yml` first-boot rendered. |
 | `infra/reset.sh` | New | FR-6 | In-place agent-state reset; rebuild escalation. |
 | `docs/prd/PRD-001-student-exercise-infra.md` | New | — | This PRD. |
 
@@ -330,7 +338,7 @@ Then the agent's working dirs / config reset to the golden baseline
 - **Region/type** — `ccx33` (x86, 8 **dedicated** vCPU / 32GB / 240GB NVMe) in `ash` — confirmed available via Hetzner API 2026-06-19, €0.266/hr. Supersedes the earlier `cpx21`/`cx22` (both undersized for the lab stack). NOTE: an earlier PRD draft labeled this "CCX43" next to 8 vCPU / 32GB specs — that was a mislabel; 8 vCPU / 32GB / 240GB is `ccx33`. `ccx43` is the larger 16 vCPU / 64GB SKU.
 - **openclaw** — pinned `2026.6.5` (Cedric's known-good build).
 - **Node** — 22 LTS via mise.
-- **Tailscale** — pre-auth key for tailnet onboarding (source from 1Password).
+- **Cloudflare** — `fluentworkshop.dev` zone; a fleet `cloudflared` tunnel token + a wildcard `*.goto26.fluentworkshop.dev` CNAME (out-of-band). `CLOUDFLARED_TOKEN` + `TUNNEL_SALT` injected via cloud-init (source from 1Password).
 - **1Password** — `EVIE - Hetzner GOTO 2026 API KEY` + per-instance OpenClaw keys.
 
 ---
@@ -338,7 +346,7 @@ Then the agent's working dirs / config reset to the golden baseline
 ## 11. Rollout Plan
 
 1. **GOT-35** — bake one test box (loop-001 Terraform → apply, human-gated), run bootstrap, snapshot. *(Terraform skeleton already plan-clean; apply needs token.)*
-2. **GOT-39** — tailnet onboarding in parallel (independent of bake chain; unblocks demos).
+2. **GOT-39** — Cloudflare Tunnel onboarding in parallel (independent of bake chain; unblocks demos).
 3. **GOT-36** — clone 14 from snapshot via `for_each`.
 4. **GOT-37** — inject per-instance keys at clone time.
 5. **GOT-38** — verify `openclaw doctor` green on all 14.
@@ -352,7 +360,7 @@ Then the agent's working dirs / config reset to the golden baseline
 | # | Question | Owner | Due | Status |
 |---|----------|-------|-----|--------|
 | Q1 | Final server_type — confirm SKU + RAM for the full lab stack | Cedric | 2026-06-20 | **Resolved:** `ccx33` (x86, 8 dedicated vCPU / 32GB / 240GB NVMe), x86 to avoid ARM risk on the pinned openclaw build. Earlier `cpx21`/4GB was a stale-brief constraint, superseded (Cedric, 2026-06-19). |
-| Q2 | Tailnet onboarding — pre-auth key baked into the snapshot, or injected per-clone via cloud-init? | Evie | 2026-06-20 | Open |
+| Q2 | Tunnel onboarding — connector baked generic, token/salt injected per-clone via cloud-init? | Evie | 2026-06-20 | **Resolved (loop-011):** connector + config helper baked generic; `CLOUDFLARED_TOKEN` + `TUNNEL_SALT` injected via cloud-init; per-box `config.yml` first-boot rendered. |
 | Q3 | Reset granularity — reset agent state only, or also clear shell history / scratch? | Cedric | 2026-06-20 | Open |
 | Q4 | Per-instance OpenClaw keys — are these the same as the LLM API keys (GOT-41), or distinct OpenClaw creds? | Cedric | 2026-06-20 | Open |
 
@@ -366,7 +374,7 @@ Then the agent's working dirs / config reset to the golden baseline
 | GOT-36 Bake 14 named instances | FR-2; depends-on GOT-35 |
 | GOT-37 Inject per-instance API keys | FR-3; depends-on GOT-36 |
 | GOT-38 Verify openclaw doctor | FR-4; depends-on GOT-37; **blocks** exercises GOT-55→61 |
-| GOT-39 Tailnet access | FR-5; independent, enables live demo |
+| GOT-39 Cloudflare Tunnel access | FR-5; independent, enables live demo |
 | GOT-40 Reset-to-clean script | FR-6; enables in-class recovery |
 | GOT-41 Procure 14 LLM API keys | depends-on / feeds FR-3 |
 | GOT-42 Instance tracking sheet | consumes this pipeline's output |
@@ -383,7 +391,8 @@ Then the agent's working dirs / config reset to the golden baseline
 | 2026-06-19 | Q1 resolved: x86 `cpx21` locked (no ARM) | Evie |
 | 2026-06-19 | Instance size corrected: `ccx33` (8 dedicated vCPU / 32GB / 240GB NVMe) per PRD §6 + Cedric. Fixed the stale 4GB/`cpx21` references and the "CCX43" SKU mislabel (8 vCPU/32GB = ccx33, not ccx43). | Evie |
 | 2026-06-19 | loop-004 reconciliation vs canonical Notion PRD-001 v1.1: repo is a lean headless box; canonical spec is a full graphical lab (~6 of 9 FRs absent). Path 2 (hybrid, sequenced MVP-first) chosen. | Evie |
-| 2026-06-19 | **4 blocking decisions resolved (Cedric):** (1) browser desktop **IN** — Xfce+noVNC+nginx basic-auth baked, per-student auth over Funnel; (2) Anthropic **org sub-keys** — provisioned via admin API, per-key spend caps, revoked at teardown; (3) Discord **new dedicated server** — 14 channels + roles + per-student bot, nuked at teardown; (4) Tailscale Funnel + gateway auth **verified on the first Hetzner box** as a pass/fail gate before snapshot. | Evie |
+| 2026-06-19 | **4 blocking decisions resolved (Cedric):** (1) browser desktop **IN** — Xfce+noVNC+nginx basic-auth baked, per-student auth over the public access layer; (2) Anthropic **org sub-keys** — provisioned via admin API, per-key spend caps, revoked at teardown; (3) Discord **new dedicated server** — 14 channels + roles + per-student bot, nuked at teardown; (4) the public access layer + gateway auth **verified on the first Hetzner box** as a pass/fail gate before snapshot (access layer later switched to Cloudflare Tunnels — see 2026-06-20 below). | Evie |
+| 2026-06-20 | **Access layer switched to Cloudflare Tunnels (loop-011).** Replaces the earlier VPN-based access approach: each box runs one baked `cloudflared` connector routing hash-obscured `*.goto26.fluentworkshop.dev` subdomains to local services (noVNC desktop, code-server, Supabase Studio, gateway, SSH, Postgres); Cloudflare terminates TLS at its edge. Token-based connector (no cert.pem); `CLOUDFLARED_TOKEN` + `TUNNEL_SALT` injected via cloud-init. code-server added to the bake. FR-5 + dependencies updated accordingly. | loop-011 |
 
 ---
 
@@ -392,6 +401,6 @@ Then the agent's working dirs / config reset to the golden baseline
 1. On the bake box, run `sudo -u ubuntu env -i openclaw --version` (stripped env) → confirms shim resolution without `mise activate`.
 2. `terraform plan` on the clone config shows exactly 14 to add, 0 to change, from the snapshot image ID.
 3. After clone, `infra/verify.sh` prints 14/14 green; intentionally break one box and confirm it's named in the failure summary.
-4. `ssh <tailnet-hostname>` reaches a box by name (not IP) for at least 3 random instances.
+4. `ssh <host>-ssh-<hash>.goto26.fluentworkshop.dev` (via the `cloudflared` client) reaches a box by name (not IP) for at least 3 random instances.
 5. Wedge a box (corrupt `~/.openclaw/config`), run `infra/reset.sh <hostname>`, confirm agent works and elapsed < 2 min.
 6. `git grep -nE '(hcloud|api[_-]?key|token)' -- . ':!*.lock.hcl'` returns no secret values in tracked files.

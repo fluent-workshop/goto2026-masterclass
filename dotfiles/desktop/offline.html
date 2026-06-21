@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="refresh" content="10" />
+    <title>Starting up — GOTO 2026 OpenClaw Lab</title>
+    <!--
+      Fail-fast offline page for the classroom desktop (FR-4). nginx serves this
+      via the reusable @offline named location when a backend is unreachable (a
+      2s proxy_connect_timeout makes that fast instead of a hang). It auto-refreshes
+      every 10s, so once the service comes up the student lands on it automatically.
+    -->
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0f1117;
+        --card: #171a23;
+        --fg: #e6e8ee;
+        --muted: #9aa3b2;
+        --accent: #f6821f; /* Cloudflare orange */
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        background: radial-gradient(1200px 600px at 50% -10%, #1b2030, var(--bg));
+        color: var(--fg);
+        display: grid;
+        place-items: center;
+        padding: 1.5rem;
+      }
+      .card {
+        max-width: 30rem;
+        width: 100%;
+        background: var(--card);
+        border: 1px solid #222634;
+        border-radius: 14px;
+        padding: 2rem 1.75rem;
+        text-align: center;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+      }
+      .spinner {
+        width: 38px;
+        height: 38px;
+        margin: 0 auto 1.25rem;
+        border: 3px solid #2a2f3d;
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) {
+        .spinner { animation: none; border-top-color: var(--accent); }
+      }
+      h1 { font-size: 1.3rem; margin: 0 0 0.5rem; }
+      p { color: var(--muted); margin: 0.4rem 0; }
+      .hint { font-size: 0.85rem; margin-top: 1.25rem; }
+      code {
+        background: #0c0e14;
+        border: 1px solid #222634;
+        border-radius: 6px;
+        padding: 0.1rem 0.4rem;
+        font-size: 0.85em;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="spinner" aria-hidden="true"></div>
+      <h1>This service is still starting</h1>
+      <p>The lab box is up, but this particular service hasn't finished booting yet.</p>
+      <p>This page refreshes itself every few seconds — hang tight.</p>
+      <p class="hint">
+        If it doesn't come back in a minute, check the service from a terminal with
+        <code>systemctl status</code>.
+      </p>
+    </main>
+  </body>
+</html>
