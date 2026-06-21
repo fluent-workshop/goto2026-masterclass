@@ -21,8 +21,8 @@ Date: 2026-06-20. Branch: `main`.
 
 - New `phase_tunnel` function, same phase-fn + stamp + `--phase`/`--force`
   pattern. Wired into `ALL_PHASES` after `phase_desktop`, before `phase_docker`.
-- Pinned `CLOUDFLARED_VERSION=2025.11.1`; installed from pinned upstream `.deb`
-  (version-guarded, idempotent).
+- Pinned `CLOUDFLARED_VERSION=2026.6.1` (verified current stable, released
+  2026-06-18); installed from pinned upstream `.deb` (version-guarded, idempotent).
 - Helper `dotfiles/tunnel/openclaw-tunnel-config.sh` → installed to
   `/usr/local/sbin/` (matches `openclaw-sonarqube-ready.sh` / `*-cred.sh`).
   Holds the single `hash8()` function: `sha256(hostname+salt)[:8]`.
@@ -89,13 +89,8 @@ Date: 2026-06-20. Branch: `main`.
 
 ## TODOs / open items
 
-- **Pin version unverified.** `CLOUDFLARED_VERSION=2025.11.1` is a plausible
-  placeholder — confirm/bump against the upstream release page before the bake
-  (commented inline).
 - **code-server deferred (security).** The editor path is the VS Code Remote
   Tunnel (devtunnel); code-server is out of this loop entirely.
-- **OpenClaw gateway port** assumed `18789` per spec default — confirm via
-  `openclaw --help`/docs on a live box (TODO left in the helper).
 - **Token + local config.yml interaction:** the architecture (per spec) renders
   a local `config.yml` AND uses `--token`. If a dashboard-managed config takes
   precedence for token connectors on the pinned cloudflared version, move the

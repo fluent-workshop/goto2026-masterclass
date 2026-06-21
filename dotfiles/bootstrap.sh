@@ -34,9 +34,9 @@ MISE_VERSION="${MISE_VERSION:-v2026.6.11}"           # exact mise release tag (g
 # fails the bake loudly rather than installing an unverified binary.
 MISE_SHA256="${MISE_SHA256:-4c1036af15efea3a4d83f13481132ec7d7dda15e7ec5869dd70a64072bf1a6c9}"
 # cloudflared (Cloudflare Tunnel connector) — pinned .deb from the upstream
-# GitHub release. Bump deliberately; confirm the tag exists at
-# https://github.com/cloudflare/cloudflared/releases (TODO: verify the exact pin).
-CLOUDFLARED_VERSION="${CLOUDFLARED_VERSION:-2025.11.1}"
+# GitHub release. Verified current stable (released 2026-06-18). Bump
+# deliberately; tags at https://github.com/cloudflare/cloudflared/releases.
+CLOUDFLARED_VERSION="${CLOUDFLARED_VERSION:-2026.6.1}"
 # This lab is Ubuntu-only: the agent user is the stock Ubuntu cloud-image
 # `ubuntu` account (passwordless sudo + injected SSH key already present). It is
 # intentionally NOT env-overridable (m5) — the cloud-init layer hardcodes
@@ -358,7 +358,7 @@ phase_tunnel() {
   # on an exact version match so a re-bake doesn't refetch over the network.
   _cfd_installed=""
   if command -v cloudflared >/dev/null 2>&1; then
-    # `cloudflared --version` prints e.g. "cloudflared version 2025.11.1 (built …)"
+    # `cloudflared --version` prints e.g. "cloudflared version 2026.6.1 (built …)"
     _cfd_installed="$(cloudflared --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)" || true
   fi
   if [[ "$_cfd_installed" != "$CLOUDFLARED_VERSION" ]]; then

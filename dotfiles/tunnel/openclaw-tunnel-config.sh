@@ -82,8 +82,8 @@ trap 'rm -f "$tmp"' EXIT
   # VS Code Remote Tunnel (devtunnel) instead, which needs no inbound ingress.
   echo "  - hostname: ${host}-goto2026-supabase-studio-${h}.${DOMAIN_BASE}"
   echo "    service: http://localhost:54323"
-  # OpenClaw gateway port: default 18789; confirm via `openclaw --help`/docs.
-  # TODO(loop-011): verify the gateway listen port on a live box.
+  # OpenClaw gateway: binds loopback:18789 (verified against the live config
+  # gateway.port + the CLI default).
   echo "  - hostname: ${host}-goto2026-gateway-${h}.${DOMAIN_BASE}"
   echo "    service: http://localhost:18789"
   # --- Protected non-HTTP services (require the cloudflared client). -------
