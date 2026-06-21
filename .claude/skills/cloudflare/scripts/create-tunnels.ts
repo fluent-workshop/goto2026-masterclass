@@ -1,37 +1,36 @@
 #!/usr/bin/env bun
 /**
  * create-tunnels.ts — Create one Cloudflare Tunnel per student box and write
- * the connector tokens into instance-secrets.toml.
+ * connector tokens into instance-secrets.toml.
  *
- * See ../ SKILL.md for full dashboard flow documentation.
+ * See ../TUNNEL.md for full playbook and architecture notes.
  *
  * Usage:
  *   bun run .claude/skills/cloudflare/scripts/create-tunnels.ts [--dry-run] [--box pikachu,abra,...]
  *
- * Flow:
- *   1. Launch a headed Chromium (you sign in, including TOTP)
- *   2. Check existing tunnels on Cloudflare (skip already-created ones)
- *   3. For each remaining box: create tunnel, capture connector token
- *   4. Write CLOUDFLARED_TOKEN per-box into instance-secrets.toml (after each success)
+ * Flow per box:
+ *   1. Navigate to Zero Trust → Create tunnel → Select Cloudflared
+ *   2. Fill tunnel name (goto2026-{box}), click Save Tunnel
+ *   3. Extract connector token from React fiber (no clipboard needed)
+ *   4. Write CLOUDFLARED_TOKEN into instance-secrets.toml
  *
  * Idempotent: boxes already having a non-empty token in instance-secrets.toml are skipped.
+ *
+ * ⚠️  Do NOT use window.location.href inside evaluate — it destroys the JS context.
+ *     Use navigate() between tunnels, then a fresh evaluate per tunnel.
  */
 
 import { readFileSync, writeFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import type { Page } from 'playwright';
-import { launch, waitForLogin, findTokenOnPage, TUNNELS_URL } from './playwright-helpers.ts';
-
-// ---------------------------------------------------------------------------
-// Config
-// ---------------------------------------------------------------------------
+import { launch, waitForLogin, ACCOUNT_ID } from './playwright-helpers.ts';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dir, '../../../..');
 const INSTANCES_TXT = resolve(REPO_ROOT, 'instances.txt');
 const TOML_PATH = resolve(REPO_ROOT, 'instance-secrets.toml');
-const TUNNEL_PREFIX = 'goto2026';
+
+const BASE = `https://dash.cloudflare.com/${ACCOUNT_ID}/one/networks/connectors/cloudflare-tunnels`;
 
 const args = process.argv.slice(2);
 const DRY_RUN = args.includes('--dry-run');
@@ -54,9 +53,10 @@ function getToken(toml: string, box: string): string {
 }
 
 function setToken(toml: string, box: string, token: string): string {
-  const pattern = new RegExp(`(\\[${box}\\][^\\[]*)CLOUDFLARED_TOKEN\\s*=\\s*"[^"]*"`);
-  if (pattern.test(toml)) return toml.replace(pattern, `$1CLOUDFLARED_TOKEN = "${token}"`);
-  return toml.replace(`[${box}]`, `[${box}]\nCLOUDFLARED_TOKEN = "${token}"`);
+  const pat = new RegExp(`(\\[${box}\\][^\\[]*)CLOUDFLARED_TOKEN\\s*=\\s*"[^"]*"`);
+  return pat.test(toml)
+    ? toml.replace(pat, `$1CLOUDFLARED_TOKEN = "${token}"`)
+    : toml.replace(`[${box}]`, `[${box}]\nCLOUDFLARED_TOKEN = "${token}"`);
 }
 
 function writeToml(content: string) {
@@ -64,72 +64,79 @@ function writeToml(content: string) {
   writeFileSync(TOML_PATH, content, 'utf8');
 }
 
-function prompt(q: string): Promise<string> {
-  const { createInterface } = require('readline');
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise(res => rl.question(q, (a: string) => { rl.close(); res(a); }));
-}
-
 // ---------------------------------------------------------------------------
-// Dashboard automation
+// Token extraction via React fiber (see TUNNEL.md for full explanation)
 // ---------------------------------------------------------------------------
 
-async function listExistingTunnelNames(page: Page): Promise<Set<string>> {
-  await page.goto(TUNNELS_URL, { waitUntil: 'networkidle', timeout: 30_000 });
-  await page.waitForTimeout(2000);
-  const bodyText = await page.evaluate(() => document.body.innerText);
-  return new Set([...bodyText.matchAll(new RegExp(`${TUNNEL_PREFIX}-\\w+`, 'g'))].map(m => m[0]));
-}
-
-async function createTunnel(page: Page, box: string): Promise<string | null> {
-  const tunnelName = `${TUNNEL_PREFIX}-${box}`;
-  console.log(`\n  → Creating: ${tunnelName}`);
-
-  await page.goto(`${TUNNELS_URL}/new`, { waitUntil: 'networkidle', timeout: 30_000 });
-  await page.waitForTimeout(1500);
-
-  // Step 1: Select Cloudflared connector type
-  const cloudflaredBtn = page.locator('text=Cloudflared').first();
-  if (await cloudflaredBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-    await cloudflaredBtn.click();
-    await page.waitForTimeout(500);
-  }
-  const nextBtn = page.locator('button:has-text("Next"), button:has-text("Select")').first();
-  if (await nextBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-    await nextBtn.click();
-    await page.waitForTimeout(1000);
-  }
-
-  // Step 2: Name the tunnel
-  const nameInput = page.locator('input[placeholder*="tunnel" i], input[name*="name" i]').first();
-  await nameInput.waitFor({ timeout: 15_000 });
-  await nameInput.fill(tunnelName);
-  await page.waitForTimeout(500);
-
-  const saveBtn = page.locator('button:has-text("Save Tunnel"), button:has-text("Save tunnel"), button:has-text("Next")').first();
-  await saveBtn.click();
-  await page.waitForTimeout(3000);
-
-  // Step 3: Extract connector token from install instructions
-  const token = await findTokenOnPage(page);
-
-  if (!token) {
-    console.error(`  ✗ Token not found for ${tunnelName} — screenshot at /tmp/cf-tunnel-${box}-error.png`);
-    await page.screenshot({ path: `/tmp/cf-tunnel-${box}-error.png` });
+const FIBER_EXTRACT_JS = /* js */`
+  (() => {
+    const btn = Array.from(document.querySelectorAll('button'))
+      .find(b => b.textContent.includes('--token'));
+    if (!btn) return null;
+    const fk = Object.keys(btn).find(k =>
+      k.startsWith('__reactFiber') || k.startsWith('__reactInternals'));
+    if (!fk) return null;
+    let node = btn[fk];
+    const seen = new Set();
+    for (let i = 0; i < 40 && node; i++) {
+      if (seen.has(node)) break;
+      seen.add(node);
+      const search = (obj, depth) => {
+        if (!obj || depth > 3 || typeof obj !== 'object') return null;
+        for (const key of Object.keys(obj)) {
+          try {
+            const val = obj[key];
+            if (typeof val === 'string' && val.length > 80 && val.includes('eyJ'))
+              return val;
+            const r = depth < 3 ? search(val, depth + 1) : null;
+            if (r) return r;
+          } catch (e) {}
+        }
+        return null;
+      };
+      const r = search(node.memoizedProps, 0) || search(node.pendingProps, 0);
+      if (r) return r.replace(/.*--token\\s+/, '').trim();
+      node = node.return;
+    }
     return null;
+  })()
+`;
+
+// ---------------------------------------------------------------------------
+// Per-tunnel creation (single page.evaluate — no location.href!)
+// ---------------------------------------------------------------------------
+
+const CREATE_AND_EXTRACT_JS = (box: string) => /* js */`
+  async () => {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const btns  = () => Array.from(document.querySelectorAll('button'));
+    const waitFor = async (fn, ms = 15000) => {
+      const end = Date.now() + ms;
+      while (Date.now() < end) { const r = fn(); if (r) return r; await sleep(300); }
+      throw new Error('Timeout waiting for: ' + fn.toString().slice(7, 60));
+    };
+
+    // Step 1: Select Cloudflared (skipped on repeat visits — CF SPA remembers)
+    const cfBtn = btns().find(b => b.textContent.trim() === 'Select Cloudflared');
+    if (cfBtn) { cfBtn.click(); await sleep(1500); }
+
+    // Step 2: Fill tunnel name
+    const inp = await waitFor(() => document.querySelector('input[placeholder*="NYC"]'));
+    const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    nativeSetter.call(inp, 'goto2026-${box}');
+    inp.dispatchEvent(new Event('input',  { bubbles: true }));
+    inp.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(500);
+
+    // Step 3: Save
+    const saveBtn = await waitFor(() => btns().find(b => /save tunnel/i.test(b.textContent)));
+    saveBtn.click();
+    await sleep(8000); // CF API round-trip + SPA render
+
+    // Step 4: Extract token from React fiber
+    ${FIBER_EXTRACT_JS.trim()}
   }
-
-  console.log(`  ✓ ${tunnelName}: ${token.slice(0, 12)}…`);
-
-  // Advance past install step if possible
-  const doneBtn = page.locator('button:has-text("Next"), button:has-text("Done"), button:has-text("Finish")').first();
-  if (await doneBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await doneBtn.click();
-    await page.waitForTimeout(1000);
-  }
-
-  return token;
-}
+`;
 
 // ---------------------------------------------------------------------------
 // Main
@@ -142,52 +149,52 @@ async function main() {
 
   let toml = readToml();
 
-  const alreadyDone = boxes.filter(b => getToken(toml, b) !== '');
-  if (alreadyDone.length) console.log(`\n⏭  Already done: ${alreadyDone.join(', ')}`);
+  const skip = boxes.filter(b => getToken(toml, b) !== '');
+  if (skip.length) console.log(`\n⏭  Already done: ${skip.join(', ')}`);
   const toCreate = boxes.filter(b => getToken(toml, b) === '');
-  if (!toCreate.length) { console.log('\n✅ All boxes have tokens. Nothing to do.'); process.exit(0); }
+  if (!toCreate.length) { console.log('\n✅ All boxes have tokens.'); process.exit(0); }
 
   const { browser, page } = await launch();
 
   try {
-    await page.goto(TUNNELS_URL, { timeout: 30_000 });
+    await page.goto(`${BASE}/new`, { timeout: 30_000 });
     await waitForLogin(page);
 
-    console.log('\n📋 Reading existing tunnels on Cloudflare…');
-    const existing = await listExistingTunnelNames(page);
-    console.log(`   Found: ${existing.size ? [...existing].join(', ') : '(none)'}`);
-
-    const conflicts = toCreate.filter(b => existing.has(`${TUNNEL_PREFIX}-${b}`));
-    if (conflicts.length) {
-      console.warn(`\n⚠️  Already exist on CF (token not capturable): ${conflicts.join(', ')}`);
-      console.warn('   Delete them in the dashboard first, then re-run, or add tokens manually.');
-      const skip = await prompt('   Skip conflicts and continue with the rest? [Y/n]: ');
-      if (skip.toLowerCase() === 'n') process.exit(1);
-    }
-
-    const toRun = toCreate.filter(b => !conflicts.includes(b));
-    console.log(`\n🔨 Creating ${toRun.length} tunnel(s)…`);
-
     let ok = 0, fail = 0;
-    for (const box of toRun) {
-      const token = await createTunnel(page, box);
-      if (token) {
-        toml = setToken(toml, box, token);
-        writeToml(toml); // save after each success
+    for (const box of toCreate) {
+      console.log(`\n  → ${box}`);
+      try {
+        // Navigate fresh each time (SPA context reset prevents stale state)
+        await page.goto(`${BASE}/new`, { waitUntil: 'networkidle', timeout: 30_000 });
+        await page.waitForTimeout(1000);
+
+        const token = await page.evaluate(CREATE_AND_EXTRACT_JS(box));
+
+        if (!token || !token.startsWith('eyJ')) {
+          throw new Error(`bad token: ${String(token).slice(0, 40)}`);
+        }
+
+        console.log(`  ✓ ${box}: ${token.slice(0, 12)}…`);
+        if (!DRY_RUN) {
+          toml = setToken(toml, box, token);
+          writeToml(toml); // save after each success so partial runs are safe
+        }
         ok++;
-      } else {
+      } catch (e: any) {
+        console.error(`  ✗ ${box}: ${e.message}`);
+        await page.screenshot({ path: `/tmp/cf-tunnel-${box}-error.png` }).catch(() => {});
         fail++;
       }
-      await page.waitForTimeout(1500);
     }
 
     console.log('\n─────────────────────────────────────────');
     console.log(`✅ Created: ${ok}  ❌ Failed: ${fail}`);
-    if (ok > 0 && !DRY_RUN) console.log('📝 Tokens written to instance-secrets.toml');
-    console.log('Next: TUNNEL_SALT=<value> bun run .claude/skills/cloudflare/scripts/create-tunnel-dns.ts');
-    console.log('Then: bash infra/clone.sh');
+    if (ok && !DRY_RUN) {
+      console.log('📝 Tokens written to instance-secrets.toml');
+      console.log('Next: TUNNEL_SALT=<value> bun run .claude/skills/cloudflare/scripts/create-tunnel-dns.ts');
+      console.log('Then: bash infra/clone.sh');
+    }
     console.log('─────────────────────────────────────────\n');
-
   } finally {
     await browser.close();
   }
