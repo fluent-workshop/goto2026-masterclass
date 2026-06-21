@@ -103,7 +103,8 @@ function extractToken(text: string): string | null {
 
 async function waitForLogin(page: Page): Promise<void> {
   console.log('\n🔐 Browser opened. Sign in to Cloudflare in the browser window.');
-  console.log('   Once you\'re on the Zero Trust dashboard (tunnels page), press Enter here...\n');
+  console.log('   Complete all steps: email → password → TOTP/2FA → org selector if prompted.');
+  console.log('   Once you see the Zero Trust tunnels list page, press Enter here...\n');
   await prompt('   > Press Enter when signed in: ');
 
   // Verify we landed somewhere useful
