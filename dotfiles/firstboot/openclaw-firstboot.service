@@ -1,0 +1,13 @@
+[Unit]
+Description=OpenClaw per-box first-boot setup (seed git identity from hostname)
+# cloud-init applies the hostname (hostnamectl) by cloud-final; run after it so
+# the derived identity uses the final hostname, not the transient boot name.
+After=cloud-final.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/openclaw-firstboot.sh
+
+[Install]
+WantedBy=multi-user.target

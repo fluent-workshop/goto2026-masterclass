@@ -106,3 +106,17 @@ Date: 2026-06-20. Branch: `main`.
   wildcard — that would point every box at one tunnel.
 - Stale memory `tailscale-auth-key-needed.md` is now obsolete (access layer no
   longer uses Tailscale) — flag for cleanup.
+
+## Follow-on — per-box git identity at first boot
+
+- New sibling first-boot unit `dotfiles/firstboot/openclaw-firstboot.service` +
+  helper `openclaw-firstboot.sh` (installed/enabled in `phase_toolchain`,
+  `After=cloud-final`). At first boot it seeds the `ubuntu` user's `--global`
+  git identity from the hostname: `user.name` title-cased (`pikachu` → `Pikachu`)
+  and `user.email` `${host}-goto2026@fluentworkshop.dev`. Runs as `sudo -u ubuntu
+HOME=/home/ubuntu` → writes `/home/ubuntu/.gitconfig`.
+- Decoupled from the tunnel helper on purpose (identity must not depend on tunnel
+  creds). Idempotent + enrollment-safe: each field is seeded ONLY when unset, so
+  the later `/enroll` override of the student's real name/email is never
+  clobbered. **Verified off-box:** seeds Pikachu on a fresh box, no-ops on
+  re-run, and leaves a pre-set (enrolled) identity untouched.

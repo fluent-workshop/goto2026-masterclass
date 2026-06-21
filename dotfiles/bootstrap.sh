@@ -76,11 +76,12 @@ as_agent() {
 #     on interactive PATH, no prompt, no compinit). Require a real checkout.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-# The bake copies on-disk assets: the shell profiles (shell/), the desktop
-# units + nginx site (desktop/), the Cloudflare Tunnel helper + unit (tunnel/),
-# and the Docker service stack (infra/services/). A curl|bash or partial checkout
-# leaves these absent → a silently broken box. Require them all up front.
-for _need in "$SCRIPT_DIR/shell" "$SCRIPT_DIR/desktop" "$SCRIPT_DIR/tunnel" "$REPO_ROOT/infra/services"; do
+# The bake copies on-disk assets: the shell profiles (shell/), the per-box
+# first-boot helper + unit (firstboot/), the desktop units + nginx site
+# (desktop/), the Cloudflare Tunnel helper + unit (tunnel/), and the Docker
+# service stack (infra/services/). A curl|bash or partial checkout leaves these
+# absent → a silently broken box. Require them all up front.
+for _need in "$SCRIPT_DIR/shell" "$SCRIPT_DIR/firstboot" "$SCRIPT_DIR/desktop" "$SCRIPT_DIR/tunnel" "$REPO_ROOT/infra/services"; do
   if [[ ! -d "$_need" ]]; then
     echo "FATAL: '$_need' not found." >&2
     echo "Run from a repo checkout (git clone … && bash dotfiles/bootstrap.sh)," >&2
@@ -238,6 +239,18 @@ phase_toolchain() {
     install -m 0644 -o "$AGENT_USER" -g "$AGENT_USER" \
       "$SCRIPT_DIR/shell/$rc" "$AGENT_HOME/.$rc"
   done
+
+  # Per-box first-boot setup: seeds the agent user's git identity from the
+  # hostname (Pikachu / pikachu-goto2026@fluentworkshop.dev) on the real box's
+  # first boot — generic at bake, so the snapshot stays per-box-agnostic. Enabled
+  # here; runs once at boot (After=cloud-final, once the hostname is applied).
+  log "Installing per-box first-boot setup helper + unit"
+  install -m 0755 "$SCRIPT_DIR/firstboot/openclaw-firstboot.sh" \
+    /usr/local/sbin/openclaw-firstboot.sh
+  install -m 0644 "$SCRIPT_DIR/firstboot/openclaw-firstboot.service" \
+    /etc/systemd/system/openclaw-firstboot.service
+  systemctl daemon-reload
+  systemctl enable openclaw-firstboot.service
 
   touch "$BAKE_STAMP_DIR/${FUNCNAME[0]}.done"
 }
@@ -519,7 +532,8 @@ phase_verify() {
   fi
 
   log "Confirming lab units are enabled (not started here)"
-  systemctl is-enabled openclaw-desktop-vnc.service openclaw-desktop-novnc.service \
+  systemctl is-enabled openclaw-firstboot.service \
+    openclaw-desktop-vnc.service openclaw-desktop-novnc.service \
     openclaw-desktop-cred.service \
     openclaw-tunnel.service openclaw-services.service nginx
 
