@@ -1,10 +1,6 @@
 ---
 name: specdocs
-description: >
-  Draft PRDs and ADRs following the specdocs templates (PRD: 15 sections + YAML
-  frontmatter; ADR: MADR 4.0 with PRD linkage). Activate when asked to write, draft,
-  create, or review a PRD or ADR, scope a feature, document a technical decision,
-  or compare architectural options. Use for any project spec work.
+description: "Draft PRDs (15-section) and ADRs (MADR 4.0) from templates. Use when writing, drafting, or reviewing a PRD/ADR, scoping a feature, or documenting a decision."
 ---
 
 # specdocs Skill

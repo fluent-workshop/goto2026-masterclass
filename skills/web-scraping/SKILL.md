@@ -1,6 +1,6 @@
 ---
 name: web-scraping
-description: Full-pipeline skill for extracting structured data from any website — browser exploration, DOM signal detection, HTTP batch extraction, auth handling, and summary reporting.
+description: "Extract structured data from any site: browser recon then HTTP batch. Use when asked to scrape, crawl, or download data from a URL."
 license: MIT
 ---
 

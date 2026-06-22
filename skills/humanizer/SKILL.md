@@ -1,10 +1,6 @@
 ---
 name: humanizer
-description: >
-  Remove signs of AI-generated writing from text. Use when editing, reviewing,
-  or drafting text that needs to sound natural and human-written. Detects and
-  fixes 27 AI writing patterns based on Wikipedia's "Signs of AI writing" guide.
-  Invoke when asked to "humanize", "de-slop", or "make this sound human".
+description: "Remove signs of AI-generated writing. Use when asked to humanize, de-slop, or make text sound human; catches 27+ AI writing patterns."
 ---
 
 # Humanizer: Remove AI Writing Patterns

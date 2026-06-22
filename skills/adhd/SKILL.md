@@ -1,6 +1,6 @@
 ---
 name: adhd
-description: Parallel divergent ideation for hard, open-ended decisions. Fans out N isolated, GROUNDED Claude Code frames (speedrunner, regulator, biology, inversion, zero-budget, ...) under different cognitive lenses with zero shared context, each able to read the repo + staged research, then the orchestrator runs a separate critic pass to score, cluster, prune traps, and deepen the top survivors. Use on /adhd, "ADHD mode", or open-ended design, architecture, naming, API/SDK-surface, strategy, and fuzzy-debugging decisions. Skip for syntax, lookups, bugs with a known root cause, or closed phrasing ("quick", "standard", "canonical", "textbook").
+description: "Parallel divergent ideation for hard open-ended decisions — fans out isolated grounded CC frames, then critiques. Use on /adhd or open-ended design."
 license: MIT
 ---
 

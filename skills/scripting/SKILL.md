@@ -1,6 +1,6 @@
 ---
 name: scripting
-description: Conventions and patterns for writing Bun+TypeScript CLI scripts in OpenClaw skills. Use when creating new skill scripts, refactoring existing scripts, or reviewing CLI code quality. Also use when someone asks about scripting standards, CLI patterns, or how to structure a new tool.
+description: "Conventions for Bun+TypeScript (and Python) CLI scripts in skills. Use when writing, refactoring, or reviewing skill scripts or CLI helper code."
 ---
 
 # Skill Scripting Conventions
