@@ -9,7 +9,7 @@
 # log in as a sudo-capable user (not root), so run the bake with `sudo`:
 #
 #   gcloud compute ssh goto-test --zone us-central1-a
-#   git clone https://github.com/spantree/goto-2026-masterclass.git
+#   git clone https://github.com/fluent-workshop/goto2026-masterclass.git
 #   cd goto-2026-masterclass
 #   sudo bash dotfiles/bootstrap.sh
 #   # then, after `gcloud compute instances stop goto-test`:

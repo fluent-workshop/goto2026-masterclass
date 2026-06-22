@@ -415,6 +415,12 @@ region-blocking, stale data, auth issues), call it out explicitly here.
 
 ---
 
+## Authenticated Service Integration
+
+Phase 2d above covers extracting cookies and CSRF tokens from the browser for use in curl — adequate for most authenticated scraping tasks. For skills that need to **repeatedly automate a service** across sessions (login flows, OTP handling, Valkey auth caching, CSRF refresh before writes, endpoint discovery), see `references/browser-auth.md` for the full Playwright-based pattern.
+
+---
+
 ## Anti-Patterns — What Not to Do
 
 - **Don't write complex browser automation to click through UI state.** If you need screenshots of different tabs or views, see if you can trigger them via URL parameters (e.g., `?date=2026-06-22` or `?category=shoes`). If not, capture the default view and move on. Don't burn 10 minutes debugging Playwright click selectors just for a screenshot.

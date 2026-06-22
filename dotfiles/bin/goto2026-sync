@@ -15,8 +15,8 @@
 
 set -euo pipefail
 
-REPO_URL="https://github.com/Spantree/goto-2026-masterclass.git"
-REPO_DIR="/opt/goto-2026-masterclass"
+REPO_URL="https://github.com/fluent-workshop/goto2026-masterclass.git"
+REPO_DIR="/opt/goto2026-masterclass"
 AGENT_USER="ubuntu"
 AGENT_HOME="/home/$AGENT_USER"
 DOTFILES="$REPO_DIR/dotfiles"
