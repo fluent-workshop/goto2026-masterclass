@@ -108,7 +108,28 @@ apply_as_agent install -d -m 0755 "$AGENT_HOME/.local/bin"
 apply_as_agent install -m 0755 "$DOTFILES/bin/goto2026-sync" "$AGENT_HOME/.local/bin/goto2026-sync"
 
 # ---------------------------------------------------------------------------
-# 3. Sync OpenClaw skills
+# 3. Sync OpenClaw workspace files (AGENTS.md and any future workspace overlays)
+# ---------------------------------------------------------------------------
+# Files in dotfiles/workspace/ are overlaid onto ~/.openclaw/workspace/.
+# This lets the masterclass push AGENTS.md updates, SOUL.md, TOOLS.md, etc.
+# without a re-bake. Student edits to files not in this directory are preserved.
+
+OCLAW_WORKSPACE="$AGENT_HOME/.openclaw/workspace"
+REPO_WORKSPACE_OVERLAY="$REPO_DIR/dotfiles/workspace"
+
+if [[ -d "$REPO_WORKSPACE_OVERLAY" ]]; then
+  log "Syncing OpenClaw workspace overlay → $OCLAW_WORKSPACE…"
+  apply_as_agent install -d -m 0755 "$OCLAW_WORKSPACE"
+  apply_as_agent rsync -a --update \
+    "$REPO_WORKSPACE_OVERLAY/" "$OCLAW_WORKSPACE/"
+  OVERLAY_COUNT=$(ls -1 "$REPO_WORKSPACE_OVERLAY" | wc -l | tr -d ' ')
+  log "  → $OVERLAY_COUNT workspace file(s) synced from repo"
+else
+  log "  (no dotfiles/workspace/ overlay — skipping)"
+fi
+
+# ---------------------------------------------------------------------------
+# 3b. Sync OpenClaw skills
 # ---------------------------------------------------------------------------
 # Skills in the repo override (or add to) the student's ~/.openclaw/workspace/skills/.
 # This is the primary mechanism for pushing skill updates to all boxes without
