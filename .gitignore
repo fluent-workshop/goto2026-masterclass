@@ -21,3 +21,16 @@ instance-secrets.toml
 
 # Editor / sed -i.bak backup files — never commit
 *.bak
+
+# SonarQube scanner working directory
+.scannerwork/
+
+# cc-dispatch: reviews are ephemeral analysis artifacts
+.cc-dispatch/reviews/
+
+# cc-dispatch: per-turn heartbeat and compact files are ephemeral
+.cc-dispatch/loops/*/progress.md
+.cc-dispatch/loops/*/compact.md
+
+# Scratch pad
+.scratch/
