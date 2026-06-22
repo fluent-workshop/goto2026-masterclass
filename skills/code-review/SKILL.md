@@ -92,6 +92,9 @@ bun run {baseDir}/scripts/sonarqube.ts issues --project <key> --severity CRITICA
 ```
 
 #### d) CodeRabbit CLI (via exec, background)
+
+> ⚠️ **Linux not supported.** The `cr` binary is macOS and Windows only — there is no Linux release. If `command -v cr` fails, skip this step and proceed with the other three sources.
+
 ```bash
 # Background it — reviews take 7–30 min for large changesets.
 # SCOPE IT: cr has a 300-file limit. On a dirty tree or broad base it errors
