@@ -19,5 +19,10 @@ vncconfig -nowin &
 xfconf-query -c xfce4-screensaver -p /screensaver/enabled -s false 2>/dev/null || true
 xfconf-query -c xfce4-screensaver -p /lock/enabled -s false 2>/dev/null || true
 
+# Arc Dark theme + Papirus Dark icons — installed by phase_desktop; applied here
+# each session start so the settings persist across VNC reconnects.
+xfconf-query -c xsettings -p /Net/ThemeName -s "Arc-Dark" 2>/dev/null || true
+xfconf-query -c xsettings -p /Net/IconThemeName -s "Papirus-Dark" 2>/dev/null || true
+
 # dbus-launch wires up the session bus Xfce needs for its panel/settings daemons.
 exec dbus-launch --exit-with-session xfce4-session

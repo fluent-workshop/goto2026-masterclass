@@ -401,6 +401,12 @@ phase_vscode() {
     /etc/systemd/system/openclaw-code-tunnel.service
   systemctl daemon-reload
 
+  # CodeRabbit CLI is macOS/Windows only — no Linux release available. Install the
+  # VS Code extension instead: same AI reviews, works in the Remote Tunnel browser UI.
+  log "Installing VS Code extensions (CodeRabbit) as $AGENT_USER"
+  as_agent code --install-extension CodeRabbit.coderabbit-vscode --force 2>/dev/null \
+    || log "  WARN: CodeRabbit extension install failed (non-fatal — may need tunnel auth first)"
+
   touch "$BAKE_STAMP_DIR/${FUNCNAME[0]}.done"
 }
 
@@ -420,12 +426,13 @@ phase_desktop() {
   # per-student htpasswd is NOT baked — it's written at first boot by
   # openclaw-desktop-cred.service from a cloud-init-dropped credential, so the
   # image carries no secret and nginx fails closed until creds land.
-  log "Installing desktop stack (Xfce + TigerVNC + noVNC + nginx)"
+  log "Installing desktop stack (Xfce + TigerVNC + noVNC + nginx + Arc/Papirus theme)"
   apt-get install -y -qq \
     xfce4 xfce4-terminal dbus-x11 \
     tigervnc-standalone-server tigervnc-common \
     novnc websockify \
-    nginx apache2-utils
+    nginx apache2-utils \
+    arc-theme papirus-icon-theme
 
   log "Installing desktop session + service units"
   install -d -o "$AGENT_USER" -g "$AGENT_USER" -m 0755 "$AGENT_HOME/.vnc"
