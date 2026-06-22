@@ -1,0 +1,632 @@
+[
+  {
+    "id": "UgBBYS2sOqTuMpoF3BR0",
+    "name": "Mark",
+    "description": "Natural Conversations",
+    "label": "Mark - Natural Conversations",
+    "custom_rate": false
+  },
+  {
+    "id": "NOpBlnGInO9m6vDvFkFC",
+    "name": "Spuds Oxley",
+    "description": "Wise and Approachable",
+    "label": "Spuds Oxley - Wise and Approachable",
+    "custom_rate": false
+  },
+  {
+    "id": "56AoDkrOh6qfVPDXZ7Pt",
+    "name": "Cassidy",
+    "description": "Crisp, Direct and Clear",
+    "label": "Cassidy - Crisp, Direct and Clear",
+    "custom_rate": false
+  },
+  {
+    "id": "1SM7GgM6IMuvQlz2BwM3",
+    "name": "Mark",
+    "description": "Casual, Relaxed and Light",
+    "label": "Mark - Casual, Relaxed and Light",
+    "custom_rate": false
+  },
+  {
+    "id": "s3TPKV1kjDlVtZbl4Ksh",
+    "name": "Adam",
+    "description": "Engaging, Friendly and Bright",
+    "label": "Adam - Engaging, Friendly and Bright",
+    "custom_rate": false
+  },
+  {
+    "id": "aMSt68OGf4xUZAnLpTU8",
+    "name": "Juniper",
+    "description": "Grounded and Professional",
+    "label": "Juniper - Grounded and Professional",
+    "custom_rate": false
+  },
+  {
+    "id": "DMyrgzQFny3JI1Y1paM5",
+    "name": "Donovan",
+    "description": "Articulate, Strong and Deep",
+    "label": "Donovan - Articulate, Strong and Deep",
+    "custom_rate": false
+  },
+  {
+    "id": "vBKc2FfBKJfcZNyEt1n6",
+    "name": "Finn",
+    "description": "Youthful, Eager and Energetic",
+    "label": "Finn - Youthful, Eager and Energetic",
+    "custom_rate": false
+  },
+  {
+    "id": "c6SfcYrb2t09NHXiT80T",
+    "name": "Jarnathan",
+    "description": "Confident and Versatile",
+    "label": "Jarnathan - Confident and Versatile",
+    "custom_rate": false
+  },
+  {
+    "id": "XA2bIQ92TabjGbpO2xRr",
+    "name": "Jerry",
+    "description": "Calm, Expressive and Narrative",
+    "label": "Jerry - Calm, Expressive and Narrative",
+    "custom_rate": false
+  },
+  {
+    "id": "g6xIsTj2HwM6VR4iXFCw",
+    "name": "Jessica Anne Bogart",
+    "description": "Chatty and Friendly",
+    "label": "Jessica Anne Bogart - Chatty and Friendly",
+    "custom_rate": false
+  },
+  {
+    "id": "wWWn96OtTHu1sn8SRGEr",
+    "name": "Hale",
+    "description": "Expressive, Deep and Emotive",
+    "label": "Hale - Expressive, Deep and Emotive",
+    "custom_rate": false
+  },
+  {
+    "id": "kdmDKE6EkgrWrrykO9Qt",
+    "name": "Alexandra",
+    "description": "Conversational and Natural",
+    "label": "Alexandra - Conversational and Natural",
+    "custom_rate": false
+  },
+  {
+    "id": "Cz0K1kOv9tD8l0b5Qu53",
+    "name": "Jon",
+    "description": "Relaxed, Deep and Approachable",
+    "label": "Jon - Relaxed, Deep and Approachable",
+    "custom_rate": false
+  },
+  {
+    "id": "EST9Ui6982FZPSi7gCHi",
+    "name": "Elise – Warm, Natural and Engaging",
+    "description": "",
+    "label": "Elise – Warm, Natural and Engaging",
+    "custom_rate": false
+  },
+  {
+    "id": "sB7vwSCyX0tQmU24cW2C",
+    "name": "Jon",
+    "description": "Natural Authority (Agent / Assistant)",
+    "label": "Jon - Natural Authority (Agent / Assistant)",
+    "custom_rate": false
+  },
+  {
+    "id": "uYXf8XasLslADfZ2MB4u",
+    "name": "Hope",
+    "description": "Bubbly, Gossipy and Girly",
+    "label": "Hope - Bubbly, Gossipy and Girly",
+    "custom_rate": false
+  },
+  {
+    "id": "OYTbf65OHHFELVut7v2H",
+    "name": "Hope",
+    "description": "Natural, Clear and Calm",
+    "label": "Hope - Natural, Clear and Calm",
+    "custom_rate": false
+  },
+  {
+    "id": "gs0tAILXbY5DNrJrsM6F",
+    "name": "Jeff",
+    "description": "Classy, Resonating and Strong",
+    "label": "Jeff - Classy, Resonating and Strong",
+    "custom_rate": false
+  },
+  {
+    "id": "zGjIP4SZlMnY9m93k97r",
+    "name": "Hope",
+    "description": "Clear, Relatable and Charismatic",
+    "label": "Hope - Clear, Relatable and Charismatic",
+    "custom_rate": false
+  },
+  {
+    "id": "scOwDtmlUjD3prqpp97I",
+    "name": "Sam",
+    "description": "Support Agent",
+    "label": "Sam - Support Agent",
+    "custom_rate": false
+  },
+  {
+    "id": "DODLEQrClDo8wCz460ld",
+    "name": "Lauren",
+    "description": "Friendly, Comforting and Soft",
+    "label": "Lauren - Friendly, Comforting and Soft",
+    "custom_rate": false
+  },
+  {
+    "id": "gJx1vCzNCD1EQHT212Ls",
+    "name": "Ava – Eager, Helpful and Understanding",
+    "description": "",
+    "label": "Ava – Eager, Helpful and Understanding",
+    "custom_rate": false
+  },
+  {
+    "id": "Gubgw9l4dtIoQA9YZHgx",
+    "name": "Brian",
+    "description": "Deep, Resonant and Comforting",
+    "label": "Brian - Deep, Resonant and Comforting",
+    "custom_rate": false
+  },
+  {
+    "id": "BZgkqPqms7Kj9ulSkVzn",
+    "name": "Eve",
+    "description": "Authentic, Energetic and Happy",
+    "label": "Eve - Authentic, Energetic and Happy",
+    "custom_rate": false
+  },
+  {
+    "id": "WAhoMTNdLdMoq1j3wf3I",
+    "name": "Hope",
+    "description": "Smooth, Engaging and Kind",
+    "label": "Hope - Smooth, Engaging and Kind",
+    "custom_rate": false
+  },
+  {
+    "id": "yM93hbw8Qtvdma2wCnJG",
+    "name": "Ivanna",
+    "description": "Young, Versatile and Casual",
+    "label": "Ivanna - Young, Versatile and Casual",
+    "custom_rate": false
+  },
+  {
+    "id": "PoHUWWWMHFrA8z7Q88pu",
+    "name": "Miranda",
+    "description": "Sweet, Bubbly and Feminine",
+    "label": "Miranda - Sweet, Bubbly and Feminine",
+    "custom_rate": false
+  },
+  {
+    "id": "l4Coq6695JDX9xtLqXDE",
+    "name": "Lauren",
+    "description": "Empathetic and Encouraging",
+    "label": "Lauren - Empathetic and Encouraging",
+    "custom_rate": false
+  },
+  {
+    "id": "KH1SQLVulwP6uG4O3nmT",
+    "name": "Brad",
+    "description": "Romantic & Gentle",
+    "label": "Brad - Romantic & Gentle",
+    "custom_rate": false
+  },
+  {
+    "id": "4e32WqNVWRquDa1OcRYZ",
+    "name": "Ryan",
+    "description": "Product Reviewer",
+    "label": "Ryan - Product Reviewer",
+    "custom_rate": false
+  },
+  {
+    "id": "EOVAuWqgSZN2Oel78Psj",
+    "name": "Aidan",
+    "description": "Social Media Influencer",
+    "label": "Aidan - Social Media Influencer",
+    "custom_rate": false
+  },
+  {
+    "id": "vZzlAds9NzvLsFSWp0qk",
+    "name": "Maria Mysh",
+    "description": "",
+    "label": "Maria Mysh",
+    "custom_rate": false
+  },
+  {
+    "id": "r1KmysJdVYZjJCm4mL3b",
+    "name": "Jessica",
+    "description": "Playful, Bright, Warm",
+    "label": "Jessica - Playful, Bright, Warm",
+    "custom_rate": false
+  },
+  {
+    "id": "DXFkLCBUTmvXpp2QwZjA",
+    "name": "Eryn",
+    "description": "Friendly, AI Assistant, Customer Service, American Female Voice",
+    "label": "Eryn - Friendly, AI Assistant, Customer Service, American Female Voice",
+    "custom_rate": false
+  },
+  {
+    "id": "MClEFoImJXBTgLwdLI5n",
+    "name": "Ivy",
+    "description": "Sophisticated and Sassy",
+    "label": "Ivy - Sophisticated and Sassy",
+    "custom_rate": false
+  },
+  {
+    "id": "f5HLTX707KIM4SzJYzSz",
+    "name": "Brad",
+    "description": "Welcoming & Casual",
+    "label": "Brad - Welcoming & Casual",
+    "custom_rate": false
+  },
+  {
+    "id": "XcXEQzuLXRU9RcfWzEJt",
+    "name": "Veda Sky",
+    "description": "Natural, Mindful and Caring",
+    "label": "Veda Sky - Natural, Mindful and Caring",
+    "custom_rate": false
+  },
+  {
+    "id": "lLgB6ZeIe84FSJa9pO1a",
+    "name": "Jessica",
+    "description": "Instructive, Mithful, Husky",
+    "label": "Jessica - Instructive, Mithful, Husky",
+    "custom_rate": false
+  },
+  {
+    "id": "DwwuoY7Uz8AP8zrY5TAo",
+    "name": "Sean",
+    "description": "Expressive and Conversational",
+    "label": "Sean - Expressive and Conversational",
+    "custom_rate": false
+  },
+  {
+    "id": "1t1EeRixsJrKbiF1zwM6",
+    "name": "Jerry B",
+    "description": "Realistic and Conversational",
+    "label": "Jerry B - Realistic and Conversational",
+    "custom_rate": false
+  },
+  {
+    "id": "cNYrMw9glwJZXR8RwbuR",
+    "name": "Belle – Empathetic Customer Service",
+    "description": "",
+    "label": "Belle – Empathetic Customer Service",
+    "custom_rate": false
+  },
+  {
+    "id": "FUfBrNit0NNZAwb58KWH",
+    "name": "Angela",
+    "description": "Conversational and Friendly",
+    "label": "Angela - Conversational and Friendly",
+    "custom_rate": false
+  },
+  {
+    "id": "ljX1ZrXuDIIRVcmiVSyR",
+    "name": "Michael",
+    "description": "Genuine and Approachable",
+    "label": "Michael - Genuine and Approachable",
+    "custom_rate": false
+  },
+  {
+    "id": "kdVjFjOXaqExaDvXZECX",
+    "name": "Burt",
+    "description": "Calm, Steady and Conversational",
+    "label": "Burt - Calm, Steady and Conversational",
+    "custom_rate": false
+  },
+  {
+    "id": "7YaUDeaStRuoYg3FKsmU",
+    "name": "Callie",
+    "description": "Playful, Inviting and Friendly",
+    "label": "Callie - Playful, Inviting and Friendly",
+    "custom_rate": false
+  },
+  {
+    "id": "kdnRe2koJdOK4Ovxn2DI",
+    "name": "Eryn",
+    "description": "Genuine, Friendly and Natural",
+    "label": "Eryn - Genuine, Friendly and Natural",
+    "custom_rate": false
+  },
+  {
+    "id": "ZauUyVXAz5znrgRuElJ5",
+    "name": "Russell",
+    "description": "Young, Outgoing and Excited",
+    "label": "Russell - Young, Outgoing and Excited",
+    "custom_rate": false
+  },
+  {
+    "id": "2BJW5coyhAzSr8STdHbE",
+    "name": "Edward",
+    "description": "Youthful, Confident and Bright",
+    "label": "Edward - Youthful, Confident and Bright",
+    "custom_rate": false
+  },
+  {
+    "id": "X03mvPuTfprif8QBAVeJ",
+    "name": "Christina",
+    "description": "Natural and Conversational",
+    "label": "Christina - Natural and Conversational",
+    "custom_rate": false
+  },
+  {
+    "id": "QF9HJC7XWnue5c9W3LkY",
+    "name": "Joseff Sweet",
+    "description": "Comfort and Warmth",
+    "label": "Joseff Sweet - Comfort and Warmth",
+    "custom_rate": false
+  },
+  {
+    "id": "7EzWGsX10sAS4c9m9cPf",
+    "name": "Jack John",
+    "description": "Conversational and Upbeat",
+    "label": "Jack John - Conversational and Upbeat",
+    "custom_rate": false
+  },
+  {
+    "id": "gfRt6Z3Z8aTbpLfexQ7N",
+    "name": "Boyd",
+    "description": "Versatile, Fatherly and Natural",
+    "label": "Boyd - Versatile, Fatherly and Natural",
+    "custom_rate": false
+  },
+  {
+    "id": "RPEIZnKMqlQiZyZd1Dae",
+    "name": "Christopher",
+    "description": "Friendly, Kind and Raspy",
+    "label": "Christopher - Friendly, Kind and Raspy",
+    "custom_rate": false
+  },
+  {
+    "id": "7WggD3IoWTIPT19PNyrW",
+    "name": "Jarnathan Cross",
+    "description": "Witty, Knowing & Poise",
+    "label": "Jarnathan Cross - Witty, Knowing & Poise ",
+    "custom_rate": false
+  },
+  {
+    "id": "rSZFtT0J8GtnLqoDoFAp",
+    "name": "Nova Westbrook",
+    "description": "Counselor and Friend",
+    "label": "Nova Westbrook - Counselor and Friend",
+    "custom_rate": false
+  },
+  {
+    "id": "NHRgOEwqx5WZNClv5sat",
+    "name": "Chelsea",
+    "description": "Conversational and Bright",
+    "label": "Chelsea - Conversational and Bright",
+    "custom_rate": false
+  },
+  {
+    "id": "bKrvJaCHEqucAEpSzACi",
+    "name": "Brian – Conversational Voice Over",
+    "description": "",
+    "label": "Brian – Conversational Voice Over",
+    "custom_rate": false
+  },
+  {
+    "id": "3XOBzXhnDY98yeWQ3GdM",
+    "name": "Brayden",
+    "description": "Cheery, Clear and Chill - Custom rate $0.20 / 1,000 credits",
+    "label": "Brayden - Cheery, Clear and Chill - Custom rate $0.20 / 1,000 credits",
+    "custom_rate": true
+  },
+  {
+    "id": "y3H6zY6KvCH2pEuQjmv8",
+    "name": "Amy",
+    "description": "Upbeat and Excited - Custom rate $0.19 / 1,000 credits",
+    "label": "Amy - Upbeat and Excited - Custom rate $0.19 / 1,000 credits",
+    "custom_rate": true
+  },
+  {
+    "id": "Q1QcmfZPmFDVUWmzASdy",
+    "name": "Matt",
+    "description": "Dramatic Radio Podcast Host",
+    "label": "Matt - Dramatic Radio Podcast Host",
+    "custom_rate": false
+  },
+  {
+    "id": "aTxZrSrp47xsP6Ot4Kgd",
+    "name": "Kayla",
+    "description": "Narrator, Expressive and Calm - Custom rate $0.10 / 1,000 credits",
+    "label": "Kayla - Narrator, Expressive and Calm - Custom rate $0.10 / 1,000 credits",
+    "custom_rate": true
+  },
+  {
+    "id": "8fcyCHOzlKDlxh1InJSf",
+    "name": "Joseph",
+    "description": "Customer Support Agent",
+    "label": "Joseph - Customer Support Agent",
+    "custom_rate": false
+  },
+  {
+    "id": "dn9HtxgDwCH96MVX9iAO",
+    "name": "Xavian",
+    "description": "Deep, Steady and Reassuring",
+    "label": "Xavian - Deep, Steady and Reassuring",
+    "custom_rate": false
+  },
+  {
+    "id": "DtsPFCrhbCbbJkwZsb3d",
+    "name": "Piper",
+    "description": "Positive, Wise and Direct - Custom rate $0.20 / 1,000 credits",
+    "label": "Piper - Positive, Wise and Direct - Custom rate $0.20 / 1,000 credits",
+    "custom_rate": true
+  },
+  {
+    "id": "ESNrF6xSj96uiykXXT1f",
+    "name": "Bryan",
+    "description": "Solemn, Dramatic, and Informed",
+    "label": "Bryan - Solemn, Dramatic, and Informed",
+    "custom_rate": false
+  },
+  {
+    "id": "fVVjLtJgnQI61CoImgHU",
+    "name": "American male voice",
+    "description": "",
+    "label": "American male voice",
+    "custom_rate": false
+  },
+  {
+    "id": "dMyQqiVXTU80dDl2eNK8",
+    "name": "Eryn",
+    "description": "Friendly, Wholesome and Rich - Custom rate $0.20 / 1,000 credits",
+    "label": "Eryn - Friendly, Wholesome and Rich - Custom rate $0.20 / 1,000 credits",
+    "custom_rate": true
+  },
+  {
+    "id": "IjnA9kwZJHJ20Fp7Vmy6",
+    "name": "Matthew",
+    "description": "Casual, Friendly and Smooth - Custom rate $0.20 / 1,000 credits",
+    "label": "Matthew - Casual, Friendly and Smooth - Custom rate $0.20 / 1,000 credits",
+    "custom_rate": true
+  },
+  {
+    "id": "sBObXMSU6qeIkKldMgv0",
+    "name": "Connery – Mature AI Companion",
+    "description": "",
+    "label": "Connery – Mature AI Companion",
+    "custom_rate": false
+  },
+  {
+    "id": "6O8E1UOlJbvkhJDpV0aB",
+    "name": "Carter",
+    "description": "Narrator and Mysterious - Custom rate $0.19 / 1,000 credits",
+    "label": "Carter - Narrator and Mysterious - Custom rate $0.19 / 1,000 credits",
+    "custom_rate": true
+  },
+  {
+    "id": "tIb1FHpzlwSiTGg6JxF0",
+    "name": "Belle",
+    "description": "Robotic and slight pausing",
+    "label": "Belle - Robotic and slight pausing",
+    "custom_rate": false
+  },
+  {
+    "id": "C3x1TEM7scV4p2AXJyrp",
+    "name": "Zuri",
+    "description": "Casual, Calm and Clear - Custom rate $0.20 / 1,000 credits",
+    "label": "Zuri - Casual, Calm and Clear - Custom rate $0.20 / 1,000 credits",
+    "custom_rate": true
+  },
+  {
+    "id": "EozfaQ3ZX0esAp1cW5nG",
+    "name": "David",
+    "description": "Confident, Friendly and Deep - Custom rate $0.20 / 1,000 credits",
+    "label": "David - Confident, Friendly and Deep - Custom rate $0.20 / 1,000 credits",
+    "custom_rate": true
+  },
+  {
+    "id": "GuflK5NRKwVLKwEeBYTy",
+    "name": "Sarah – Warm and Grounded",
+    "description": "",
+    "label": "Sarah – Warm and Grounded",
+    "custom_rate": false
+  },
+  {
+    "id": "rzgrf9VyEb0LLa824k8Q",
+    "name": "Piper – Spirited and Dynamic",
+    "description": "",
+    "label": "Piper – Spirited and Dynamic",
+    "custom_rate": false
+  },
+  {
+    "id": "tgfcQY9SGvn3GfmnNWIi",
+    "name": "Larry",
+    "description": "Easygoing Customer Care Agent",
+    "label": "Larry - Easygoing Customer Care Agent",
+    "custom_rate": false
+  },
+  {
+    "id": "ZEBslWM12xCQWILoQtiP",
+    "name": "Aaron Sage",
+    "description": "Friendly, Excited and Rapid - Custom rate $0.20 / 1,000 credits",
+    "label": "Aaron Sage - Friendly, Excited and Rapid - Custom rate $0.20 / 1,000 credits",
+    "custom_rate": true
+  },
+  {
+    "id": "rhKGiHCLeAC5KPBEZiUq",
+    "name": "Apple",
+    "description": "Quirky, Unique and Relatable",
+    "label": "Apple - Quirky, Unique and Relatable",
+    "custom_rate": false
+  },
+  {
+    "id": "FYZl5JbWOAm6O1fPKAOu",
+    "name": "Matthew Schmitz",
+    "description": "Casual, Chill and Deep - Custom rate $0.20 / 1,000 credits",
+    "label": "Matthew Schmitz - Casual, Chill and Deep - Custom rate $0.20 / 1,000 credits",
+    "custom_rate": true
+  },
+  {
+    "id": "MP7UPhn7eVWqCGJGIh6Q",
+    "name": "Aaron Patrick",
+    "description": "Upbeat and Inviting - Custom rate $0.20 / 1,000 credits",
+    "label": "Aaron Patrick - Upbeat and Inviting - Custom rate $0.20 / 1,000 credits",
+    "custom_rate": true
+  },
+  {
+    "id": "zCgijgIKIMkFHnzXcCva",
+    "name": "Brad",
+    "description": "Energetic, Rushed and Intense - Custom rate $0.20 / 1,000 credits",
+    "label": "Brad - Energetic, Rushed and Intense - Custom rate $0.20 / 1,000 credits",
+    "custom_rate": true
+  },
+  {
+    "id": "7QN34D2r3hCNwbOYIeK0",
+    "name": "Warren",
+    "description": "Effortless and Cool",
+    "label": "Warren - Effortless and Cool",
+    "custom_rate": false
+  },
+  {
+    "id": "AEW6JTgnyoPaoB9zlK3S",
+    "name": "Sophie – Sparky and Social",
+    "description": "",
+    "label": "Sophie – Sparky and Social",
+    "custom_rate": false
+  },
+  {
+    "id": "uhfmGpskiOe0s3pNnkP6",
+    "name": "Briggs",
+    "description": "Optimistic and Encouraging",
+    "label": "Briggs - Optimistic and Encouraging",
+    "custom_rate": false
+  },
+  {
+    "id": "YyqkX0AHv8W5D1vxG9lR",
+    "name": "Hazel",
+    "description": "Warm, Witty & Conversational Female Voice",
+    "label": "Hazel - Warm, Witty & Conversational Female Voice",
+    "custom_rate": false
+  },
+  {
+    "id": "Zv7P8CISODgj9wDHyyI9",
+    "name": "David",
+    "description": "Voice Actor - Custom rate $0.02 / 1,000 credits",
+    "label": "David - Voice Actor - Custom rate $0.02 / 1,000 credits",
+    "custom_rate": true
+  },
+  {
+    "id": "pvxGJdhknm00gMyYHtET",
+    "name": "Kota",
+    "description": "Smooth, Rich and Expressive - Custom rate $0.12 / 1,000 credits",
+    "label": "Kota - Smooth, Rich and Expressive - Custom rate $0.12 / 1,000 credits",
+    "custom_rate": true
+  },
+  {
+    "id": "HgyIHe81F3nXywNwkraY",
+    "name": "Nate",
+    "description": "Sultry, Whispery and Seductive - Custom rate $0.20 / 1,000 credits",
+    "label": "Nate - Sultry, Whispery and Seductive - Custom rate $0.20 / 1,000 credits",
+    "custom_rate": true
+  },
+  {
+    "id": "JGzTGubAVbbgG0SsLIlg",
+    "name": "Riley",
+    "description": "Shrill, Optimisitic and Content",
+    "label": "Riley - Shrill, Optimisitic and Content",
+    "custom_rate": false
+  }
+]

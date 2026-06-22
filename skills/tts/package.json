@@ -1,0 +1,10 @@
+{
+  "name": "goto2026-masterclass-skill-tts",
+  "private": true,
+  "dependencies": {
+    "bottleneck": "^2.19.5"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  }
+}

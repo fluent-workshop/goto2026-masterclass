@@ -1,0 +1,11 @@
+{
+  "name": "openclaw-skill-tts",
+  "private": true,
+  "dependencies": {
+    "@evie/lib": "workspace:*",
+    "bottleneck": "^2.19.5"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  }
+}
