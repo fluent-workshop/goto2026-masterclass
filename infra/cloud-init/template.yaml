@@ -84,6 +84,95 @@ write_files:
       CLOUDFLARED_TOKEN="{{CLOUDFLARED_TOKEN}}"
       POSTGRES_APP_PASSWORD="{{POSTGRES_APP_PASSWORD}}"
 
+  # Per-box OpenClaw bootstrap config — consumed once by openclaw-init.service
+  # (After=cloud-final). Contains all credentials needed to configure the gateway,
+  # Discord bot, LLM providers, TTS, and STT in one `openclaw config patch` call.
+  # Security: root:root 0640 (ubuntu-readable). Keys rotate after the class.
+  - path: /etc/openclaw/oc-bootstrap.json
+    owner: root:ubuntu
+    permissions: '0640'
+    content: |
+      {
+        "gateway": {
+          "auth": { "mode": "token", "token": "{{OPENCLAW_GATEWAY_TOKEN}}" },
+          "mode": "local",
+          "bind": "loopback",
+          "trustedProxies": ["127.0.0.1", "::1"],
+          "controlUi": { "allowedOrigins": ["https://{{HOSTNAME}}-gt26-gateway-{{TUNNEL_HASH}}.fluentworkshop.dev"] }
+        },
+        "channels": {
+          "discord": {
+            "enabled": true,
+            "token": "{{DISCORD_BOT_TOKEN}}",
+            "groupPolicy": "allowlist",
+            "streaming": { "mode": "progress" },
+            "guilds": {
+              "1518545624751149207": {
+                "requireMention": false,
+                "users": ["932691257136910429"]
+              }
+            }
+          }
+        },
+        "plugins": { "entries": { "discord": { "enabled": true, "config": {} } } },
+        "models": {
+          "providers": {
+            "anthropic": {
+              "apiKey": "{{ANTHROPIC_API_KEY}}",
+              "timeoutSeconds": 1200,
+              "models": [
+                {"id":"claude-haiku-4-5","name":"Claude Haiku 4.5","api":"anthropic-messages","contextWindow":200000,"maxTokens":64000,"input":["text","image"],"cost":{"input":1,"output":5,"cacheRead":0.1,"cacheWrite":1.25}},
+                {"id":"claude-sonnet-4-6","name":"Claude Sonnet 4.6","api":"anthropic-messages","contextWindow":1000000,"maxTokens":128000,"reasoning":true,"input":["text","image"],"cost":{"input":3,"output":15,"cacheRead":0.3,"cacheWrite":3.75}},
+                {"id":"claude-opus-4-8","name":"Claude Opus 4.8","api":"anthropic-messages","contextWindow":1000000,"maxTokens":128000,"reasoning":true,"input":["text","image"],"cost":{"input":5,"output":25,"cacheRead":0.5,"cacheWrite":6.25}}
+              ]
+            },
+            "openai": {
+              "apiKey": "{{OPENAI_API_KEY}}",
+              "baseUrl": "https://api.openai.com/v1",
+              "api": "openai-completions",
+              "timeoutSeconds": 1200,
+              "models": [
+                {"id":"gpt-5.1","name":"GPT-5.1","contextWindow":400000},
+                {"id":"gpt-5.1-mini","name":"GPT-5.1 Mini","contextWindow":400000},
+                {"id":"o1","name":"o1","reasoning":true,"contextWindow":200000}
+              ]
+            }
+          }
+        },
+        "agents": {
+          "defaults": {
+            "model": { "primary": "anthropic/claude-sonnet-4-6", "fallbacks": ["anthropic/claude-haiku-4-5"] }
+          }
+        },
+        "tools": {
+          "media": {
+            "audio": {
+              "enabled": true,
+              "timeoutSeconds": 120,
+              "models": [
+                {"type":"cli","command":"/usr/local/bin/whisper-transcribe","capabilities":["audio"]},
+                {"provider":"openai","model":"whisper-1","capabilities":["audio"]}
+              ]
+            }
+          }
+        },
+        "messages": {
+          "tts": {
+            "auto": "inbound",
+            "provider": "elevenlabs",
+            "modelOverrides": { "enabled": true, "allowVoice": true },
+            "providers": {
+              "elevenlabs": {
+                "apiKey": "{{ELEVENLABS_API_KEY}}",
+                "modelId": "eleven_flash_v2_5",
+                "voiceSettings": { "speed": 1.0 },
+                "speakerVoiceId": "{{ELEVENLABS_VOICE_ID}}"
+              }
+            }
+          }
+        }
+      }
+
   # VS Code Remote Tunnel name — a 24-char hex string derived from
   # sha256(hostname + TUNNEL_SALT + "vscode")[:24]. Not the hostname, not in DNS,
   # unguessable without both secrets. Consumed by openclaw-code-tunnel.service
@@ -165,73 +254,7 @@ runcmd:
   # it (m3). The `|| true` runs the whole redirected command, so the log is always
   # written. Runs as `ubuntu` to match the bake's agent user (see note above).
   - sudo -u ubuntu openclaw doctor > /var/log/openclaw-doctor.log 2>&1 || true
-  # Patch OpenClaw config: Anthropic + OpenAI models, Whisper CLI as primary STT,
-  # ElevenLabs TTS with the per-box voice. Written here (not baked) because the
-  # API keys and voice ID are per-instance secrets.
-  - |
-    ANTHROPIC_KEY="$(cat /home/ubuntu/.openclaw/credentials/api-key 2>/dev/null)"
-    OPENAI_KEY="$(grep OPENAI_API_KEY /etc/openclaw/student-keys.env | cut -d'"' -f2)"
-    ELABS_KEY="$(grep ELEVENLABS_API_KEY /etc/openclaw/student-keys.env | cut -d'"' -f2)"
-    ELABS_VOICE="$(grep ELEVENLABS_VOICE_ID /etc/openclaw/student-keys.env | cut -d'"' -f2)"
-    cat > /tmp/oc-config-patch.json << OCEOF
-    {
-      "models": {
-        "providers": {
-          "anthropic": {
-            "apiKey": "$ANTHROPIC_KEY",
-            "timeoutSeconds": 1200,
-            "models": [
-              {"id":"claude-haiku-4-5","name":"Claude Haiku 4.5","api":"anthropic-messages","contextWindow":200000,"maxTokens":64000,"input":["text","image"],"cost":{"input":1,"output":5,"cacheRead":0.1,"cacheWrite":1.25}},
-              {"id":"claude-sonnet-4-6","name":"Claude Sonnet 4.6","api":"anthropic-messages","contextWindow":1000000,"maxTokens":128000,"reasoning":true,"input":["text","image"],"cost":{"input":3,"output":15,"cacheRead":0.3,"cacheWrite":3.75}},
-              {"id":"claude-opus-4-8","name":"Claude Opus 4.8","api":"anthropic-messages","contextWindow":1000000,"maxTokens":128000,"reasoning":true,"input":["text","image"],"cost":{"input":5,"output":25,"cacheRead":0.5,"cacheWrite":6.25}}
-            ]
-          },
-          "openai": {
-            "apiKey": "$OPENAI_KEY",
-            "baseUrl": "https://api.openai.com/v1",
-            "api": "openai-completions",
-            "timeoutSeconds": 1200,
-            "models": [
-              {"id":"gpt-5.1","name":"GPT-5.1","contextWindow":400000},
-              {"id":"gpt-5.1-mini","name":"GPT-5.1 Mini","contextWindow":400000},
-              {"id":"o1","name":"o1","reasoning":true,"contextWindow":200000}
-            ]
-          }
-        }
-      },
-      "agents": {
-        "defaults": {
-          "model": {"primary": "anthropic/claude-sonnet-4-6", "fallbacks": ["anthropic/claude-haiku-4-5"]}
-        }
-      },
-      "tools": {
-        "media": {
-          "audio": {
-            "enabled": true,
-            "timeoutSeconds": 120,
-            "models": [
-              {"type":"cli","command":"/usr/local/bin/whisper-transcribe","capabilities":["audio"]},
-              {"provider":"openai","model":"whisper-1","capabilities":["audio"]}
-            ]
-          }
-        }
-      },
-      "messages": {
-        "tts": {
-          "auto": "inbound",
-          "provider": "elevenlabs",
-          "modelOverrides": {"enabled": true, "allowVoice": true},
-          "providers": {
-            "elevenlabs": {
-              "apiKey": "$ELABS_KEY",
-              "modelId": "eleven_flash_v2_5",
-              "voiceSettings": {"speed": 1.0},
-              "speakerVoiceId": "$ELABS_VOICE"
-            }
-          }
-        }
-      }
-    }
-    OCEOF
-    sudo -u ubuntu openclaw config patch --file /tmp/oc-config-patch.json >> /var/log/openclaw-doctor.log 2>&1 || true
-    rm -f /tmp/oc-config-patch.json
+  # openclaw-init.service (baked) handles gateway install, Discord plugin,
+  # and config patch from /etc/openclaw/oc-bootstrap.json (dropped above).
+  # Kick it explicitly so it runs even if the unit fires before cloud-final.
+  - systemctl start openclaw-init.service || true

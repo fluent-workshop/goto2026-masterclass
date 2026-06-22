@@ -286,8 +286,15 @@ phase_toolchain() {
     /usr/local/sbin/openclaw-firstboot.sh
   install -m 0644 "$SCRIPT_DIR/firstboot/openclaw-firstboot.service" \
     /etc/systemd/system/openclaw-firstboot.service
+
+  log "Installing OpenClaw credential init script + unit (runs after cloud-final)"
+  install -m 0755 "$SCRIPT_DIR/firstboot/openclaw-init.sh" \
+    /usr/local/sbin/openclaw-init.sh
+  install -m 0644 "$SCRIPT_DIR/firstboot/openclaw-init.service" \
+    /etc/systemd/system/openclaw-init.service
+
   systemctl daemon-reload
-  systemctl enable openclaw-firstboot.service
+  systemctl enable openclaw-firstboot.service openclaw-init.service
 
   touch "$BAKE_STAMP_DIR/${FUNCNAME[0]}.done"
 }

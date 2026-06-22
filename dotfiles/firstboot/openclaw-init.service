@@ -1,0 +1,16 @@
+[Unit]
+Description=OpenClaw first-boot configuration (gateway + Discord + credentials)
+After=cloud-final.target network-online.target openclaw-desktop-cred.service
+Wants=network-online.target
+# Run once; if it succeeds the stamp file prevents re-runs on later boots.
+ConditionPathExists=!/var/lib/openclaw-init.done
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/openclaw-init.sh
+ExecStartPost=/bin/touch /var/lib/openclaw-init.done
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

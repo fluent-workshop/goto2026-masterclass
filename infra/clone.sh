@@ -487,11 +487,14 @@ for host in "${hosts[@]}"; do
     --arg ca  "$coderabbit_api_key" \
     --arg vt  "$vscode_tunnel_github_token" \
     --arg vn  "$vscode_tunnel_name" \
+    --arg dbt "$discord_bot_token" \
+    --arg ogt "$openclaw_gateway_token" \
     '{HOSTNAME:$hn,ANTHROPIC_API_KEY_B64:$ak,DESKTOP_USER:$du,DESKTOP_PASS:$dp,
       TUNNEL_SALT:$ts,CLOUDFLARED_TOKEN:$ct,POSTGRES_APP_PASSWORD:$pp,
       ELEVENLABS_VOICE_ID:$vi,OPENAI_API_KEY:$oa,ELEVENLABS_API_KEY:$ea,
       EXA_API_KEY:$xa,FIRECRAWL_API_KEY:$fa,CODERABBIT_API_KEY:$ca,
-      VSCODE_TUNNEL_GITHUB_TOKEN:$vt,VSCODE_TUNNEL_NAME:$vn}')"
+      VSCODE_TUNNEL_GITHUB_TOKEN:$vt,VSCODE_TUNNEL_NAME:$vn,
+      DISCORD_BOT_TOKEN:$dbt,OPENCLAW_GATEWAY_TOKEN:$ogt}')"
   bun run --silent "$SCRIPT_DIR/scripts/render-template.ts" \
     "$TEMPLATE" --data "$data" > "$out" \
     || die "template rendering failed for '$host'"
