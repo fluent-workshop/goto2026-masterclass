@@ -17,3 +17,15 @@ node     = "22.23.0"   # exact LTS ("Jod") patch — what OpenClaw and the labs 
 bun      = "1.2.23"    # fast JS runtime + package manager (companion app, scripts)
 eza      = "0.23.4"    # modern `ls` with icons/tree — powers the `ls` alias in zshrc
 starship = "1.24.2"    # the cross-shell prompt (box name, git branch, node version)
+
+# Student language toolchain + task runners (loop-022). Pinned so every box is
+# identical and a re-bake on another day is byte-for-byte the same. npm globals
+# (claude-code, codex, supabase) and semgrep (via uv) install in phase_student_tools
+# AFTER `mise install`, since they need node / uv from here.
+python   = "3.13.3"    # CPython for uv/semgrep and the Python labs
+uv       = "0.7.0"     # fast Python package/tool manager (also installs semgrep)
+just     = "1.46.0"    # command runner (justfiles) used across the lab repos
+go       = "1.23.3"    # Go toolchain
+rust     = "latest"    # rustup-managed stable Rust (cargo, rustc)
+pnpm     = "9.12.3"    # fast Node package manager
+yt-dlp   = "2026.06.09" # media downloader used in the ElevenLabs/audio exercises

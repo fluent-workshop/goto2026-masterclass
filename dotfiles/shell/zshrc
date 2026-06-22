@@ -80,6 +80,12 @@ fi
 alias ..='cd ..'
 alias g='git'
 
+# On Ubuntu 22.04 the Debian packages install under different binary names to
+# avoid clashes: bat → batcat, fd → fdfind. Alias them back to the names students
+# expect. Guarded so the alias only appears when the package is actually present.
+command -v batcat &>/dev/null && alias bat='batcat'
+command -v fdfind &>/dev/null && alias fd='fdfind'
+
 # ---- Prompt ---------------------------------------------------------------
 # Starship gives a friendly prompt (box name, current dir, git branch, Node
 # version). If it's somehow missing, fall back to a plain hostname-forward prompt
