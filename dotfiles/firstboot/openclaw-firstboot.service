@@ -1,8 +1,13 @@
 [Unit]
 Description=OpenClaw per-box first-boot setup (seed git identity from hostname)
-# cloud-init applies the hostname (hostnamectl) by cloud-final; run after it so
-# the derived identity uses the final hostname, not the transient boot name.
-After=cloud-final.service
+# Derive identity from the final hostname. cloud-init applies the hostname in its
+# early (local) stage — well before network-online.target — so ordering here is
+# safe. We deliberately do NOT use After=cloud-final.service: on images whose
+# default target is graphical.target, cloud-final runs late and that ordering
+# forms a cycle with WantedBy=multi-user.target, so systemd silently drops this
+# job and the unit never runs. network-online.target matches the other lab units.
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot

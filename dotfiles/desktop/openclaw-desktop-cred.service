@@ -1,9 +1,16 @@
 [Unit]
 Description=Materialize classroom desktop basic-auth from per-instance credentials
-# cloud-final writes /etc/openclaw/desktop.env; run after it, before nginx serves.
-After=cloud-final.service
+# cloud-init writes /etc/openclaw/desktop.env in its early stage — present well
+# before network-online.target. We order on network-online.target rather than
+# cloud-final.service: on images whose default target is graphical.target,
+# After=cloud-final.service + WantedBy=multi-user.target forms an ordering cycle
+# and systemd silently drops this job. ConditionPathExists makes this a clean
+# no-op on a box without the cred file (e.g. the bake box), so it only acts on
+# provisioned clones.
+After=network-online.target
+Wants=network-online.target nginx.service
 Before=nginx.service
-Wants=nginx.service
+ConditionPathExists=/etc/openclaw/desktop.env
 
 [Service]
 Type=oneshot
