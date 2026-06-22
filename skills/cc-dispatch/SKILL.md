@@ -42,7 +42,7 @@ To advance an existing session to the next loop, use `continue` (compact → con
 ## Commands
 
 ```bash
-CC=skills/cc-dispatch/scripts/cc-dispatch.ts
+CC={baseDir}/scripts/cc-dispatch.ts
 
 # Launch a NEW session for a cwd (first loop, or fresh start)
 bun run $CC launch --loop loop-001-slug --repo ~/src/owner/my-repo \

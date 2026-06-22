@@ -304,22 +304,41 @@ skills/<skill-name>/
 - Script name = tool name (not `index.ts`, not `main.py`)
 - One primary CLI per skill; add subcommands, not separate scripts
 
+## Referencing Scripts with `{baseDir}`
+
+Always invoke a skill's own scripts through `{baseDir}` in the SKILL.md body —
+never a hardcoded `skills/<name>/scripts/...` path. OpenClaw substitutes the
+skill's absolute directory at runtime, so the command resolves regardless of the
+agent's working directory.
+
+```bash
+# Good — portable, resolves to this skill's dir
+bun run {baseDir}/scripts/my-tool.ts run --output output/data/
+
+# Bad — breaks when cwd ≠ workspace root, and is brittle if the skill moves
+bun run skills/my-tool/scripts/my-tool.ts run --output output/data/
+```
+
+`{baseDir}` resolves to the skill that owns the SKILL.md, so use it only for that
+skill's own scripts. To call another skill's CLI, go through that skill (where its
+own `{baseDir}` applies) rather than reaching across with a literal path.
+
 ## Code Quality
 
 > **Prerequisites:** the SonarQube scan below needs a `sonarqube` skill/integration
 > that is **not** included in this workspace. Skip this section unless you have one
 > configured.
 
-After completing work on a skill, run a SonarQube scan to catch code smells, bugs, and security issues:
+After completing work on a skill, run a SonarQube scan to catch code smells, bugs, and security issues. From the `sonarqube` skill (where `{baseDir}` resolves to its directory):
 
 ```bash
-bun run skills/sonarqube/scripts/sonarqube.ts scan <path-to-your-workspace>
+bun run {baseDir}/scripts/sonarqube.ts scan <path-to-your-workspace>
 ```
 
 Review any new issues introduced by your changes:
 
 ```bash
-bun run skills/sonarqube/scripts/sonarqube.ts issues --project <your-project-key> --severity CRITICAL
+bun run {baseDir}/scripts/sonarqube.ts issues --project <your-project-key> --severity CRITICAL
 ```
 
 Consider a quality profile that disables rules irrelevant to Bun (e.g., `node:` prefix imports). Run `sonarqube setup` if the profile doesn't exist yet.

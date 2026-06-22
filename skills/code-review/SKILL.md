@@ -39,7 +39,8 @@ Launch simultaneously:
 
 #### a) Claude Code (via cc-dispatch)
 ```bash
-bun run skills/cc-dispatch/scripts/cc-dispatch.ts launch \
+# Run from the cc-dispatch skill ({baseDir} → that skill's dir)
+bun run {baseDir}/scripts/cc-dispatch.ts launch \
   --task "Review PR #N on owner/repo (branch). [detailed instructions]" \
   --repo /path/to/local/repo \
   --notify-session "<calling-session-key>"
@@ -85,8 +86,9 @@ Known false positive: Codex/CodeRabbit may flag a "missing zod-to-json-schema
 
 #### c) SonarQube (via sonarqube skill)
 ```bash
-bun run skills/sonarqube/scripts/sonarqube.ts scan /path/to/repo
-bun run skills/sonarqube/scripts/sonarqube.ts issues --project <key> --severity CRITICAL,MAJOR
+# Run from the sonarqube skill ({baseDir} → that skill's dir)
+bun run {baseDir}/scripts/sonarqube.ts scan /path/to/repo
+bun run {baseDir}/scripts/sonarqube.ts issues --project <key> --severity CRITICAL,MAJOR
 ```
 
 #### d) CodeRabbit CLI (via exec, background)

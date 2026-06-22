@@ -49,7 +49,7 @@ cwd stays disposable.
 
 ```bash
 # 1. Scaffold the run (grounded on a repo)
-bun run skills/adhd/scripts/adhd.ts init \
+bun run {baseDir}/scripts/adhd.ts init \
   --problem "@/path/to/problem.md" \
   --slug goto-masterclass-prep \
   --repo ~/src/owner/my-repo \
@@ -61,12 +61,12 @@ bun run skills/adhd/scripts/adhd.ts init \
 #    Produce these FIRST with whatever research tooling you have.
 
 # 3. Diverge — launches all frames in parallel, barriers, aggregates
-bun run skills/adhd/scripts/adhd.ts diverge --run <runDir>
+bun run {baseDir}/scripts/adhd.ts diverge --run <runDir>
 # → writes <runDir>/results/diverge.json
 
 # Frame catalog / status
-bun run skills/adhd/scripts/adhd.ts frames
-bun run skills/adhd/scripts/adhd.ts status --run <runDir>
+bun run {baseDir}/scripts/adhd.ts frames
+bun run {baseDir}/scripts/adhd.ts status --run <runDir>
 ```
 
 **Pick frames manually** with `--frames speedrunner,regulator,inversion,biology,on-call-3am`.

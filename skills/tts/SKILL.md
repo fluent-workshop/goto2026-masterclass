@@ -16,25 +16,25 @@ voice (`ELEVENLABS_VOICE_ID`). If either is missing, ask your instructor.
 
 ```bash
 # Single generation (uses your instance's default voice)
-bun run skills/tts/scripts/tts.ts generate \
+bun run {baseDir}/scripts/tts.ts generate \
   --text "Hello world" --output hello.mp3
 
 # From a file, with a faster delivery
-bun run skills/tts/scripts/tts.ts generate \
+bun run {baseDir}/scripts/tts.ts generate \
   --file script.txt --output speech.mp3 --stretch 1.15
 
 # Override the voice with any raw ElevenLabs voice ID
-bun run skills/tts/scripts/tts.ts generate \
+bun run {baseDir}/scripts/tts.ts generate \
   --text "Different voice" --voice 21m00Tcm4TlvDq8ikWAM --output alt.mp3
 
 # Batch from a JSON manifest
-bun run skills/tts/scripts/tts.ts batch \
+bun run {baseDir}/scripts/tts.ts batch \
   --manifest podcast.json --output-dir ./renders/
 
 # Cache management
-bun run skills/tts/scripts/tts.ts cache list
-bun run skills/tts/scripts/tts.ts cache reap
-bun run skills/tts/scripts/tts.ts cache clear
+bun run {baseDir}/scripts/tts.ts cache list
+bun run {baseDir}/scripts/tts.ts cache reap
+bun run {baseDir}/scripts/tts.ts cache clear
 ```
 
 ## Humanizer (do this first)
