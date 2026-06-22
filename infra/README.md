@@ -34,20 +34,18 @@ bake-time-vs-first-boot split that the rest of this document assumes.
 
 `clone.sh` does two things; rendering is the default and is side-effect-free.
 
-**Render (always):** for each host in `instances.txt` (or hosts passed as args)
+**Render (always):** for each host in `instances.toml` (or hosts passed as args)
 it substitutes every `{{PLACEHOLDER}}` in `cloud-init/template.yaml` —
-hostname, desktop user/password, OpenClaw API key, `TUNNEL_SALT`,
-`CLOUDFLARED_TOKEN`, `POSTGRES_APP_PASSWORD` — and writes a ready-to-boot file to
-the **gitignored** `cloud-init/generated/` dir, plus a credential manifest. The
-golden image carries none of this; the rendered files are the _only_ place the
-assembled per-box secrets exist on disk.
+hostname, desktop credentials, Anthropic API key, fleet-wide student API keys,
+`TUNNEL_SALT`, `CLOUDFLARED_TOKEN`, `POSTGRES_APP_PASSWORD`, `ELEVENLABS_VOICE_ID`
+— and writes a ready-to-boot file to the **gitignored** `cloud-init/generated/`
+dir. The golden image carries none of this; the rendered files are the _only_
+place the assembled per-box secrets exist on disk.
 
 ```bash
-# render every box in instances.txt (op = pull fleet salt from 1Password)
-TUNNEL_SECRETS_SOURCE=op \
-  OP_TUNNEL_SALT_ITEM='op://Openclaw/EVIE - Cloudflared goto-2026-fleet Token/TUNNEL_SALT' \
-  OPENCLAW_API_KEY_SOURCE=stub ALLOW_STUB=1 \
-  bash infra/clone.sh
+# render every box in instances.toml (reads fleet keys from .envrc.local)
+export $(grep -v '^#' .envrc.local | xargs)
+TUNNEL_SECRETS_SOURCE=env bash infra/clone.sh
 ```
 
 **Provision (opt-in, `--provision` / `PROVISION=1`):** after rendering, create
@@ -80,28 +78,52 @@ loop owns the disposable fleet.
 cd infra/terraform && terraform apply    # create/refresh the goto-test bake box
 ```
 
-## `instance-secrets.toml` — per-box secrets
+## `instances.toml` — the instance roster (git-tracked)
 
-This gitignored file at the repo root holds the **per-instance** secrets, keyed
-by hostname:
+The canonical host list and non-sensitive per-box config, committed to git:
 
 ```toml
 [pikachu]
-CLOUDFLARED_TOKEN     = "eyJ…"          # pikachu's OWN Cloudflare Tunnel token
-POSTGRES_APP_PASSWORD = "skill-crisp-mouse"
+elevenlabs_voice_id = "BZgkqPqms7Kj9ulSkVzn"  # ElevenLabs voice ID (not a secret)
+role = "instructor"
+
+[abra]
+elevenlabs_voice_id = "dn9HtxgDwCH96MVX9iAO"
+role = "student"
 ```
 
-- **Per-box, not fleet-wide.** Each box runs its _own_ Cloudflare Tunnel (its own
-  connector token) and its own Postgres password. The only fleet-wide tunnel
-  secret is `TUNNEL_SALT` (it just salts the hostname hash), which lives in
-  1Password, not here.
-- **Gitignored, always.** It contains live credentials. `clone.sh` reads it to
-  render cloud-init; it must never be committed (`.gitignore` blocks it, and so
-  does `*.bak`).
-- **Why per-box tunnels?** So one box's token can't impersonate another, and so a
-  request for `pikachu-…` is routed only by _pikachu's_ connector. (A single
-  shared tunnel would load-balance requests across all connectors — wrong for
-  per-box routing.)
+`clone.sh` reads section names as the host list (replacing the old `instances.txt`)
+and reads `elevenlabs_voice_id` per-box for cloud-init rendering. Anything that's
+not a credential belongs here — voice IDs, roles, future group assignments.
+
+## `instance-secrets.toml` — per-box secrets (gitignored)
+
+Holds every per-instance credential, keyed by hostname. See
+`instance-secrets.toml.example` at the repo root for the full shape and field
+descriptions. Key fields:
+
+```toml
+[pikachu]
+CLOUDFLARED_TOKEN          = "eyJ…"      # this box's own Cloudflare Tunnel token
+POSTGRES_APP_PASSWORD      = "word-word-word"
+ANTHROPIC_API_KEY          = "sk-ant-…"  # per-box, for billing isolation
+OPENAI_API_KEY             = ""           # leave blank until issued
+ELEVENLABS_API_KEY         = "sk_…"      # fleet-wide (same on every box)
+EXA_API_KEY                = "…"          # fleet-wide
+FIRECRAWL_API_KEY          = "fc-…"      # fleet-wide
+CODERABBIT_API_KEY         = "cr-…"      # fleet-wide
+VSCODE_TUNNEL_GITHUB_TOKEN = "ghp_…"     # fleet-wide (class GitHub account PAT)
+DESKTOP_PASS               = "word-word-word"  # noVNC basic-auth password
+```
+
+- **Gitignored, always.** `.gitignore` blocks it; never commit it.
+- **Per-box vs fleet-wide.** `CLOUDFLARED_TOKEN`, `POSTGRES_APP_PASSWORD`,
+  `ANTHROPIC_API_KEY`, and `DESKTOP_PASS` are unique per box. The six skill API
+  keys and the VS Code tunnel token are fleet-wide (same value, copied to every
+  section for uniformity — `clone.sh` reads them from here rather than requiring
+  separate env vars).
+- **Why per-box tunnels?** So one box's token can't impersonate another. A shared
+  token would load-balance across all connectors — wrong for per-box hostname routing.
 
 ## Replicating this for your own multi-box deployment
 
@@ -109,9 +131,10 @@ To stand up your own fleet from one image:
 
 1. **Bake + image:** run `dotfiles/bootstrap.sh` on a base VM, stop it, and
    `gcloud compute images create … --family <your-family>`.
-2. **List your hosts** in `instances.txt`, and create a
-   `<your-family>`/secrets file like `instance-secrets.toml` (one section per
-   host). Keep it out of git.
+2. **List your hosts** in `instances.toml` (section name = hostname, plus any
+   non-sensitive per-box metadata), and create `instance-secrets.toml` (one
+   section per host, same shape as `instance-secrets.toml.example`). Keep the
+   secrets file out of git.
 3. **Template:** adapt `cloud-init/template.yaml` to write whatever per-box files
    your first-boot units expect.
 4. **Render + provision:** `clone.sh` (pointing `GCP_IMAGE_FAMILY`,
