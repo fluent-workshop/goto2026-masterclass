@@ -121,8 +121,9 @@ TUNNEL_SALT_RE='^[A-Za-z0-9]{8,128}$'
 # instance-secrets.toml can never become code executed as root.
 #   - Cloudflare connector token: base64url-encoded JSON blob, always "eyJ…".
 #   - Postgres app password: the generated 3-word passphrase (alnum + . _ -).
-CLOUDFLARED_TOKEN_RE='^eyJ[A-Za-z0-9._=/+-]+$'
-POSTGRES_APP_PASSWORD_RE='^[A-Za-z0-9._-]+$'
+# Secret validation and TOML parsing are handled by the Bun scripts in
+# infra/scripts/ (validate-secrets.ts, toml-get.ts). The regex constants
+# that used to live here have moved there.
 
 # --- helpers -----------------------------------------------------------------
 die()  { echo "clone.sh: $*" >&2; exit 1; }
@@ -234,21 +235,10 @@ INSTANCE_SECRETS="$REPO_ROOT/instance-secrets.toml"
 
 # Parse a per-instance value from instance-secrets.toml.
 # Sections look like: [pikachu] / KEY = "value"
-fetch_instance_secret() {
-  local host="$1" key="$2" label="${3:-$2}"
-  local val
-  val="$(sed -n "/^\[${host}\]/,/^\[/p" "$INSTANCE_SECRETS" \
-    | grep "^${key}" \
-    | sed "s/${key} *= *\"\(.*\)\"/\1/")"
-  [[ -n "$val" ]] \
-    || die "no ${label} for host '${host}' in instance-secrets.toml"
-  [[ "$val" == *$'\n'* || "$val" == *$'\r'* ]] \
-    && die "${label} for '${host}' contains CR/LF"
-  printf '%s' "$val"
-}
-
-fetch_instance_password() { fetch_instance_secret "$1" 'POSTGRES_APP_PASSWORD'; }
-fetch_instance_cloudflared_token() { fetch_instance_secret "$1" 'CLOUDFLARED_TOKEN'; }
+# fetch_instance_secret / fetch_instance_password / fetch_instance_cloudflared_token
+# replaced by `bun run infra/scripts/toml-get.ts` in the render loop below.
+# The fragile sed/grep TOML parser is gone; toml-get handles quoting, whitespace,
+# and missing sections with clear error messages.
 
 # Create one GCP instance per rendered host from the golden image family. The
 # rendered cloud-init is injected as the `user-data` metadata key (GCE cloud-init
@@ -408,27 +398,39 @@ for host in "${hosts[@]}"; do
   rendered="${rendered//\{\{OPENCLAW_API_KEY_B64\}\}/$api_key_b64}"
   rendered="${rendered//\{\{DESKTOP_USER\}\}/$DESKTOP_USER}"
   rendered="${rendered//\{\{DESKTOP_PASS\}\}/$pass}"
-  postgres_app_password="$(fetch_instance_password "$host")"
-  cloudflared_token="$(fetch_instance_cloudflared_token "$host")"
-  # Strict validation BEFORE substitution: both land in tunnel.env, sourced by
-  # root on the box, so reject anything outside their known charset (this also
-  # subsumes the CR/LF check). A backtick/$()/quote here would otherwise run as
-  # root at first boot.
-  [[ "$cloudflared_token" =~ $CLOUDFLARED_TOKEN_RE ]] \
-    || die "CLOUDFLARED_TOKEN for '$host' is malformed (must match $CLOUDFLARED_TOKEN_RE)"
-  [[ "$postgres_app_password" =~ $POSTGRES_APP_PASSWORD_RE ]] \
-    || die "POSTGRES_APP_PASSWORD for '$host' is malformed (must match $POSTGRES_APP_PASSWORD_RE)"
-  # TUNNEL_SALT is fleet-wide; CLOUDFLARED_TOKEN is now per-instance.
-  rendered="${rendered//\{\{TUNNEL_SALT\}\}/$tunnel_salt}"
-  rendered="${rendered//\{\{CLOUDFLARED_TOKEN\}\}/$cloudflared_token}"
-  rendered="${rendered//\{\{POSTGRES_APP_PASSWORD\}\}/$postgres_app_password}"
+  # --- Bun helpers: TOML extraction + secret validation + template rendering ---
+  # toml-get reads instance-secrets.toml properly (no fragile sed/grep parser).
+  # validate-secrets checks token shape and shell-safety before anything hits
+  # the cloud-init template. render-template substitutes all {{PLACEHOLDERS}}
+  # safely (split/join — no regex special-char hazards in replacement values).
+  # All three live in infra/scripts/ and speak JSON/text on stdout.
 
-  if printf '%s' "$rendered" | grep -q '{{.*}}'; then
-    die "unsubstituted placeholder left in render for '$host'"
-  fi
+  # Extract per-instance secrets via toml-get (fails loudly if section/key missing)
+  cloudflared_token="$(bun run --silent "$SCRIPT_DIR/scripts/toml-get.ts" \
+    "$REPO_ROOT/instance-secrets.toml" "$host" CLOUDFLARED_TOKEN)"
+  postgres_app_password="$(bun run --silent "$SCRIPT_DIR/scripts/toml-get.ts" \
+    "$REPO_ROOT/instance-secrets.toml" "$host" POSTGRES_APP_PASSWORD)"
 
+  # Validate secrets before they touch the template (exit 1 on any failure)
+  bun run --silent "$SCRIPT_DIR/scripts/validate-secrets.ts" \
+    "$REPO_ROOT/instance-secrets.toml" "$host" "$tunnel_salt" \
+    || die "secret validation failed for '$host' — see above"
+
+  # Render template via Bun (safe string substitution, errors on unresolved placeholders)
   out="$OUT_DIR/$host.cloud-init.yaml"
-  printf '%s\n' "$rendered" > "$out"
+  data="$(jq -n \
+    --arg hn  "$host" \
+    --arg ak  "$api_key_b64" \
+    --arg du  "$DESKTOP_USER" \
+    --arg dp  "$pass" \
+    --arg ts  "$tunnel_salt" \
+    --arg ct  "$cloudflared_token" \
+    --arg pp  "$postgres_app_password" \
+    '{HOSTNAME:$hn,OPENCLAW_API_KEY_B64:$ak,DESKTOP_USER:$du,DESKTOP_PASS:$dp,
+      TUNNEL_SALT:$ts,CLOUDFLARED_TOKEN:$ct,POSTGRES_APP_PASSWORD:$pp}')"
+  bun run --silent "$SCRIPT_DIR/scripts/render-template.ts" \
+    "$TEMPLATE" --data "$data" > "$out" \
+    || die "template rendering failed for '$host'"
   chmod 0600 "$out"
 
   printf '%s\t%s\t%s\t%s\n' \
