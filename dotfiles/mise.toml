@@ -1,0 +1,19 @@
+# mise.toml — the student box toolchain, in ONE place.
+#
+# The bake installs this to ~/.config/mise/config.toml for the agent (`ubuntu`)
+# user and runs `mise install`, so everything the interactive shell needs is
+# declared here. Want a different Node, or to add a tool (e.g. `deno`, `uv`)?
+# Edit this file and re-bake — you don't have to touch bootstrap.sh.
+#
+# Versions are PINNED to an exact release so all 14 student boxes are identical
+# and a re-bake on another day installs byte-for-byte the same tools.
+#
+# (mise itself, OpenClaw, and cloudflared are NOT here — they are bootstrapped
+# earlier in bootstrap.sh: mise from a checksum-verified binary, OpenClaw via
+# npm, cloudflared from a pinned .deb.)
+
+[tools]
+node     = "22.23.0"   # exact LTS ("Jod") patch — what OpenClaw and the labs run on
+bun      = "1.2.23"    # fast JS runtime + package manager (companion app, scripts)
+eza      = "0.23.4"    # modern `ls` with icons/tree — powers the `ls` alias in zshrc
+starship = "1.24.2"    # the cross-shell prompt (box name, git branch, node version)

@@ -18,22 +18,78 @@ setopt SHARE_HISTORY       # share history across sessions
 # permission never hangs a class session on the interactive "[y/n]?" prompt.
 autoload -Uz compinit && compinit -i -d "$HOME/.zcompdump"
 
+# Lazy completions: generate a tool's completion the FIRST time you tab-complete
+# it, not at every shell startup (keeps new shells instant). Scoped to the two
+# tools students actually use here — gh (GitHub CLI) and bun — on purpose; this
+# is a coding class, not a Kubernetes one.
+if [[ -o interactive ]]; then
+  _comp_cache="${XDG_CACHE_HOME:-$HOME/.cache}/zsh-completions"
+  [[ -d "$_comp_cache" ]] || mkdir -p "$_comp_cache"
+
+  _lazy_complete() {
+    local cmd=$1 cache="$_comp_cache/_$1"
+    unfunction "$cmd" 2>/dev/null
+    if [[ ! -s "$cache" ]]; then
+      case "$cmd" in
+        gh)  command gh completion -s zsh   >"$cache" 2>/dev/null ;;
+        bun) command bun completions zsh    >"$cache" 2>/dev/null ;;
+      esac
+    fi
+    [[ -s "$cache" ]] && source "$cache"
+    command "$cmd" "$@"
+  }
+  for _c in gh bun; do
+    eval "$_c() { _lazy_complete $_c \"\$@\" }"
+  done
+  unset _c
+fi
+
 # ---- mise -----------------------------------------------------------------
 # Shims are already on PATH (via ~/.zshenv); activate adds the per-prompt hook
 # so the toolchain stays in sync if a project pins its own versions.
 command -v mise &>/dev/null && eval "$(mise activate zsh)"
 
-# ---- Prompt ---------------------------------------------------------------
-# Hostname-forward so it is always obvious which box you are on
-# ("you are on Pikachu"). %m = short hostname, %~ = cwd.
-setopt PROMPT_SUBST
-PROMPT='%F{cyan}%m%f:%F{blue}%~%f %# '
+# ---- Functions ------------------------------------------------------------
+# mkcd: make a directory and step into it (one move instead of two).
+mkcd() { mkdir -p "$1" && cd "$1"; }
 
-# ---- Safe aliases ---------------------------------------------------------
-alias ll='ls -lah'
-alias la='ls -A'
+# kill-port: free a TCP port (handy when a dev server is still holding :3000).
+kill-port() {
+  local pids
+  pids="$(lsof -t -i ":$1" 2>/dev/null)"
+  if [[ -n "$pids" ]]; then
+    echo "$pids" | xargs kill -9 && echo "killed process(es) on port $1"
+  else
+    echo "no process on port $1"
+  fi
+}
+alias kp='kill-port'
+
+# ---- Aliases --------------------------------------------------------------
+# eza is a modern `ls` (icons, tree, git-aware), installed via mise.toml. Fall
+# back to plain ls if it isn't on PATH so the shell still works either way.
+if command -v eza &>/dev/null; then
+  alias ls='eza --icons --group-directories-first'
+  alias ll='eza --icons --group-directories-first --long --all'
+  alias la='eza --icons --all'
+  alias lt='eza --icons --tree --level=2'
+else
+  alias ll='ls -lah'
+  alias la='ls -A'
+fi
 alias ..='cd ..'
 alias g='git'
+
+# ---- Prompt ---------------------------------------------------------------
+# Starship gives a friendly prompt (box name, current dir, git branch, Node
+# version). If it's somehow missing, fall back to a plain hostname-forward prompt
+# so the shell stays usable and it's still obvious which box you're on.
+if command -v starship &>/dev/null; then
+  eval "$(starship init zsh)"
+else
+  setopt PROMPT_SUBST
+  PROMPT='%F{cyan}%m%f:%F{blue}%~%f %# '
+fi
 
 # ---- Local overrides (not baked into the image) ---------------------------
 [[ -f "$HOME/.zshrc.local" ]] && source "$HOME/.zshrc.local"

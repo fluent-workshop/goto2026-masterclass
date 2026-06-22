@@ -1,0 +1,48 @@
+"$schema" = 'https://starship.rs/config-schema.json'
+
+# Friendly, minimal prompt for the masterclass boxes. Two lines: an info line
+# (which box you're on, the directory, git branch + status, and the Node version
+# when you're in a JS project), then a clean input line. This is YOUR shell on
+# the box — edit it freely. See https://starship.rs/config for every module.
+
+format = """
+$hostname\
+$directory\
+$git_branch\
+$git_status\
+$nodejs\
+$line_break\
+$character\
+"""
+
+add_newline = true
+
+# Always show the box name (e.g. "pikachu") so it's obvious which machine you're
+# on, even though you reach it over a Cloudflare Tunnel rather than plain SSH.
+[hostname]
+ssh_only = false
+format = '[$hostname ](bold magenta)'
+
+[directory]
+truncation_length = 3
+truncation_symbol = '…/'
+style = 'bold blue'
+
+[git_branch]
+symbol = ' '
+style = 'bold yellow'
+format = '[$symbol$branch ]($style)'
+
+[git_status]
+style = 'red'
+format = '([$all_status$ahead_behind ]($style))'
+
+# Shows the active Node version only inside a JS project (package.json, etc.).
+[nodejs]
+symbol = ' '
+style = 'green'
+format = '[$symbol($version) ]($style)'
+
+[character]
+success_symbol = '[❯](bold green)'
+error_symbol = '[❯](bold red)'

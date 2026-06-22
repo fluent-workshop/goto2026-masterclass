@@ -31,7 +31,10 @@ set -euo pipefail
 
 # ---- Pin everything. A masterclass image must be reproducible. -------------
 OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.6.5}"     # pinned to Cedric's known-good build; bump deliberately
-NODE_VERSION="${NODE_VERSION:-22.23.0}"              # exact LTS ("Jod") patch; bump deliberately
+# Node, bun, eza, starship versions live in dotfiles/mise.toml (the single
+# source of truth for the per-user toolchain). phase_toolchain installs that file
+# and runs `mise install`; the post-install assert reads the pinned Node back out
+# of it. mise itself is still pinned below.
 MISE_VERSION="${MISE_VERSION:-v2026.6.11}"           # exact mise release tag (git tag form, leading v)
 # SHA256 of the linux-x64 mise binary for $MISE_VERSION, from the release's
 # SHASUMS256.txt. MUST be updated together with MISE_VERSION — a mismatch
@@ -90,6 +93,14 @@ for _need in "$SCRIPT_DIR/shell" "$SCRIPT_DIR/firstboot" "$SCRIPT_DIR/desktop" "
     echo "FATAL: '$_need' not found." >&2
     echo "Run from a repo checkout (git clone … && bash dotfiles/bootstrap.sh)," >&2
     echo "NOT piped over curl|bash — the bake's on-disk assets must exist." >&2
+    exit 1
+  fi
+done
+# The toolchain manifest + prompt config are single files (not dirs) consumed by
+# phase_toolchain — require them too so a partial checkout fails early, not mid-bake.
+for _file in "$SCRIPT_DIR/mise.toml" "$SCRIPT_DIR/starship.toml"; do
+  if [[ ! -f "$_file" ]]; then
+    echo "FATAL: '$_file' not found (run from a repo checkout)." >&2
     exit 1
   fi
 done
@@ -187,18 +198,24 @@ phase_toolchain() {
     log "mise ${MISE_VERSION} already present — skipping"
   fi
 
-  # ---- 4. Node via mise (per-user, pinned to exact patch) -------------------
-  # Node is pinned to the exact semver in $NODE_VERSION so two bakes on different
-  # days install byte-identical Node. The post-install assert fails the bake if
-  # mise resolved anything other than the pin (also serves as the "node works for
-  # the agent user" check).
-  log "Pinning node@${NODE_VERSION} via mise (global)"
-  as_agent "$MISE_BIN" use -g "node@${NODE_VERSION}"
-  as_agent "$MISE_BIN" reshim   # ensure node/npm/npx shims exist before we use npm
+  # ---- 4. Toolchain via mise.toml (node, bun, eza, starship) ----------------
+  # The whole per-user toolchain is DECLARED in dotfiles/mise.toml — the single
+  # source of truth a student can read or edit in one place. We install it as the
+  # agent user's global mise config, then `mise install` pins every tool to its
+  # exact version, so two bakes on different days are byte-identical. The
+  # post-install assert reads the pinned Node back out of mise.toml and fails the
+  # bake if it didn't resolve (also the "node works for the agent user" check).
+  log "Installing toolchain from mise.toml (node, bun, eza, starship)"
+  install -d -m 0755 -o "$AGENT_USER" -g "$AGENT_USER" "$AGENT_HOME/.config/mise"
+  install -m 0644 -o "$AGENT_USER" -g "$AGENT_USER" \
+    "$SCRIPT_DIR/mise.toml" "$AGENT_HOME/.config/mise/config.toml"
+  as_agent "$MISE_BIN" install
+  as_agent "$MISE_BIN" reshim   # ensure node/npm/npx/bun shims exist before we use npm
 
+  expected_node="$(sed -nE 's/^[[:space:]]*node[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' "$SCRIPT_DIR/mise.toml")"
   node_v="$(as_agent node -v 2>/dev/null)" || true
-  if [[ "$node_v" != "v${NODE_VERSION}" ]]; then
-    echo "FATAL: node ${NODE_VERSION} expected, got '${node_v:-<none>}'." >&2
+  if [[ "$node_v" != "v${expected_node}" ]]; then
+    echo "FATAL: node ${expected_node:-<unset in mise.toml>} expected, got '${node_v:-<none>}'." >&2
     exit 1
   fi
 
@@ -231,7 +248,7 @@ phase_toolchain() {
   # `User=ubuntu` does) so resolution never depends on that fallback.
   log "Symlinking mise shims into /usr/local/bin"
   ln -sf "$MISE_BIN" /usr/local/bin/mise
-  for shim in node npm npx openclaw; do
+  for shim in node npm npx openclaw bun; do
     ln -sf "$SHIMS_DIR/$shim" "/usr/local/bin/$shim"
   done
 
@@ -243,6 +260,12 @@ phase_toolchain() {
     install -m 0644 -o "$AGENT_USER" -g "$AGENT_USER" \
       "$SCRIPT_DIR/shell/$rc" "$AGENT_HOME/.$rc"
   done
+
+  # Starship prompt config (zshrc runs `starship init`; ~/.config/mise was
+  # created above). Kept in dotfiles/ so a student can restyle their prompt.
+  log "Installing starship prompt config for $AGENT_USER"
+  install -m 0644 -o "$AGENT_USER" -g "$AGENT_USER" \
+    "$SCRIPT_DIR/starship.toml" "$AGENT_HOME/.config/starship.toml"
 
   # Per-box first-boot setup: seeds the agent user's git identity from the
   # hostname (Pikachu / pikachu-goto2026@fluentworkshop.dev) on the real box's
