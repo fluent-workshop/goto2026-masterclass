@@ -1,0 +1,64 @@
+# Canonical instance roster — GOTO 2026 masterclass
+# Non-sensitive per-box config only. Secrets live in instance-secrets.toml (gitignored).
+#
+# Hostname = the TOML section name. 14 total = 10 registered + 4 buffer.
+# clone.sh reads this roster: section names → host list, and
+# elevenlabs_voice_id per box → the cloud-init render. ElevenLabs voice IDs are
+# voice identifiers (not credentials), so they live here in git, not in secrets.
+# role is informational (instructor box = pikachu; everyone else = student).
+
+[pikachu]
+elevenlabs_voice_id = "BZgkqPqms7Kj9ulSkVzn"
+role = "instructor"
+
+[abra]
+elevenlabs_voice_id = "dn9HtxgDwCH96MVX9iAO"
+role = "student"
+
+[ditto]
+elevenlabs_voice_id = "c6SfcYrb2t09NHXiT80T"
+role = "student"
+
+[dragonite]
+elevenlabs_voice_id = "rSZFtT0J8GtnLqoDoFAp"
+role = "student"
+
+[gengar]
+elevenlabs_voice_id = "7WggD3IoWTIPT19PNyrW"
+role = "student"
+
+[jolteon]
+elevenlabs_voice_id = "vBKc2FfBKJfcZNyEt1n6"
+role = "student"
+
+[lapras]
+elevenlabs_voice_id = "XcXEQzuLXRU9RcfWzEJt"
+role = "student"
+
+[machamp]
+elevenlabs_voice_id = "gs0tAILXbY5DNrJrsM6F"
+role = "student"
+
+[meowth]
+elevenlabs_voice_id = "uYXf8XasLslADfZ2MB4u"
+role = "student"
+
+[onix]
+elevenlabs_voice_id = "ESNrF6xSj96uiykXXT1f"
+role = "student"
+
+[rapidash]
+elevenlabs_voice_id = "rzgrf9VyEb0LLa824k8Q"
+role = "student"
+
+[squirtle]
+elevenlabs_voice_id = "7QN34D2r3hCNwbOYIeK0"
+role = "student"
+
+[vaporeon]
+elevenlabs_voice_id = "DODLEQrClDo8wCz460ld"
+role = "student"
+
+[vulpix]
+elevenlabs_voice_id = "MClEFoImJXBTgLwdLI5n"
+role = "student"
