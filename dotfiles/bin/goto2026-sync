@@ -16,7 +16,9 @@
 set -euo pipefail
 
 REPO_URL="https://github.com/fluent-workshop/goto2026-masterclass.git"
-REPO_DIR="/opt/goto2026-masterclass"
+REPO_DIR="${GOTO2026_REPO:-/opt/goto2026-masterclass}"
+CLONE_HOME="${HOME:-/home/ubuntu}/src/fluent-workshop/goto2026-masterclass"
+# Student-facing path: ~/src/fluent-workshop/goto2026-masterclass (symlinked to REPO_DIR)
 AGENT_USER="ubuntu"
 AGENT_HOME="/home/$AGENT_USER"
 DOTFILES="$REPO_DIR/dotfiles"
@@ -86,6 +88,11 @@ log "Applying starship config…"
 apply_as_agent install -d -m 0755 "$AGENT_HOME/.config/starship"
 [[ -f "$DOTFILES/starship.toml" ]] && \
   apply_as_agent install -m 0644 "$DOTFILES/starship.toml" "$AGENT_HOME/.config/starship/starship.toml"
+
+# Create the student-facing symlink ~/src/fluent-workshop/goto2026-masterclass → /opt/goto2026-masterclass
+# so students' paths look like Cedric's (mirrors the fluent-workshop GitHub org path).
+apply_as_agent install -d -m 0755 "$(dirname "$CLONE_HOME")"
+[[ -e "$CLONE_HOME" ]] || apply_as_agent ln -s "$REPO_DIR" "$CLONE_HOME"
 
 log "Applying bin scripts…"
 apply_as_agent install -d -m 0755 "$AGENT_HOME/.local/bin"
