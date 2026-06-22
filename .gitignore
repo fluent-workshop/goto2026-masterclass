@@ -16,3 +16,5 @@ infra/cloud-init/generated/
 *.tfstate.*
 .terraform.lock.hcl
 crash.log
+
+instance-secrets.toml
