@@ -9,3 +9,10 @@ export PATH="$HOME/.local/share/mise/shims:$HOME/.local/bin:/usr/local/bin:$PATH
 
 # Drop duplicate PATH entries ($path is tied to $PATH, so this covers both).
 typeset -U path
+
+# Fleet-wide student tool keys (OPENAI_API_KEY, ELEVENLABS_API_KEY, EXA_API_KEY,
+# FIRECRAWL_API_KEY, CODERABBIT_API_KEY, …). Written by cloud-init at first boot
+# to a root-owned, ubuntu-readable file. Sourced here so every shell — and the
+# tools it launches (claude, codex, skill scripts) — sees them. Absent on a dev
+# box or before first boot, so guard on existence.
+[[ -f /etc/openclaw/student-keys.env ]] && source /etc/openclaw/student-keys.env
