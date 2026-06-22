@@ -34,3 +34,5 @@ instance-secrets.toml
 
 # Scratch pad
 .scratch/
+infra/keys/*
+!infra/keys/*.pub

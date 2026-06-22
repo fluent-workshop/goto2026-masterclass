@@ -70,6 +70,11 @@
 #   GCP_INSTANCE_PREFIX     instance name prefix (default: goto-)
 #   GCP_SSH_USER            admin login injected via ssh-keys (default: cedric)
 #   GCP_SSH_PUBKEY_PATH     admin public key (default: ~/.ssh/id_ed25519.pub)
+#
+# Three keys are always injected (all trusted admin + instructor access):
+#   1. Cedric's MacBook:       ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII8l7J7IvLdLrwVXwJZzeBOUqF0KqKjFlNVC6jwD2CP1
+#   2. OpenClaw account (Mac mini): ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHlfPHnFAoDVrHaWZ6bEwGJRNvB8gVeJGYbiBh7peVgV
+#   3. Pikachu instructor key: infra/keys/pikachu-instructor.pub
 
 set -euo pipefail
 
@@ -257,12 +262,26 @@ provision_gcp() {
     || die "golden image family '$GCP_IMAGE_FAMILY' not found in project $GCP_PROJECT"
 
   # Optional admin ssh-key metadata (so we can SSH in to verify the fleet).
+  # Build multi-key ssh-keys metadata. GCP format: one "user:pubkey" per line.
+  # We always inject three keys: Cedric's MacBook, the OpenClaw account on the
+  # Mac mini, and the pikachu instructor key (so pikachu can SSH all students).
+  local CEDRIC_MACBOOK_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII8l7J7IvLdLrwVXwJZzeBOUqF0KqKjFlNVC6jwD2CP1 cedric-macbook"
+  local OPENCLAW_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHlfPHnFAoDVrHaWZ6bEwGJRNvB8gVeJGYbiBh7peVgV openclaw-mac-mini"
+  local PIKACHU_PUBKEY_PATH="$REPO_ROOT/infra/keys/pikachu-instructor.pub"
+  local PIKACHU_KEY=""
+  [[ -r "$PIKACHU_PUBKEY_PATH" ]] && PIKACHU_KEY="$(tr -d '\n' < "$PIKACHU_PUBKEY_PATH")"
+
   local ssh_meta=""
+  local key_lines=()
+  # Extra key from env/path (backwards compat)
   if [[ -r "$GCP_SSH_PUBKEY_PATH" ]]; then
-    ssh_meta="${GCP_SSH_USER}:$(tr -d '\n' < "$GCP_SSH_PUBKEY_PATH")"
-  else
-    warn "GCP_SSH_PUBKEY_PATH ($GCP_SSH_PUBKEY_PATH) not readable — instances will have no admin ssh-key (use 'gcloud compute ssh')."
+    key_lines+=("${GCP_SSH_USER}:$(tr -d '\n' < "$GCP_SSH_PUBKEY_PATH")")
   fi
+  key_lines+=("${GCP_SSH_USER}:${CEDRIC_MACBOOK_KEY}")
+  key_lines+=("${GCP_SSH_USER}:${OPENCLAW_KEY}")
+  [[ -n "$PIKACHU_KEY" ]] && key_lines+=("${GCP_SSH_USER}:${PIKACHU_KEY}")
+  # Join with literal \n (GCP metadata accepts newline-separated key lines)
+  ssh_meta="$(printf '%s\n' "${key_lines[@]}")"
 
   local host out name meta created=0 skipped=0 failed=0
   for host in "${hosts[@]}"; do

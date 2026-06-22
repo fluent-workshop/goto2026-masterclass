@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+# goto2026-sync — pull the latest masterclass repo and re-apply student configs.
+#
+# Run this to pick up late-breaking changes without a full re-bake:
+#   goto2026-sync           # pull + apply
+#   goto2026-sync --status  # show repo status only
+#   sudo goto2026-sync --apply-system  # also re-apply system-level dotfiles (needs root)
+#
+# Designed to be called:
+#   - Manually by the student or instructor over SSH
+#   - Via `ssh student@<box> goto2026-sync` from pikachu (instructor machine)
+#   - On a scheduled timer if openclaw-sync.timer is enabled
+#
+# Safe to run multiple times (idempotent).
+
+set -euo pipefail
+
+REPO_URL="https://github.com/Spantree/goto-2026-masterclass.git"
+REPO_DIR="/opt/goto-2026-masterclass"
+AGENT_USER="ubuntu"
+AGENT_HOME="/home/$AGENT_USER"
+DOTFILES="$REPO_DIR/dotfiles"
+
+STATUS_ONLY=0
+APPLY_SYSTEM=0
+for arg in "$@"; do
+  case "$arg" in
+    --status)        STATUS_ONLY=1 ;;
+    --apply-system)  APPLY_SYSTEM=1 ;;
+    --help|-h)
+      echo "Usage: goto2026-sync [--status] [--apply-system]"
+      echo "  --status         show repo status and pending changes, don't apply"
+      echo "  --apply-system   also re-apply system configs (requires root)"
+      exit 0 ;;
+  esac
+done
+
+log() { echo "[goto2026-sync] $*"; }
+die() { echo "[goto2026-sync] ERROR: $*" >&2; exit 1; }
+
+# ---------------------------------------------------------------------------
+# 1. Clone or pull the repo
+# ---------------------------------------------------------------------------
+
+if [[ ! -d "$REPO_DIR/.git" ]]; then
+  log "First run — cloning $REPO_URL → $REPO_DIR"
+  git clone --depth=1 "$REPO_URL" "$REPO_DIR"
+  chown -R "$AGENT_USER:$AGENT_USER" "$REPO_DIR" 2>/dev/null || true
+else
+  log "Pulling latest from origin/main…"
+  BEFORE=$(git -C "$REPO_DIR" rev-parse HEAD)
+  git -C "$REPO_DIR" pull --ff-only origin main 2>&1 | sed 's/^/  /'
+  AFTER=$(git -C "$REPO_DIR" rev-parse HEAD)
+  if [[ "$BEFORE" == "$AFTER" ]]; then
+    log "Already up to date ($AFTER)"
+  else
+    log "Updated $BEFORE → $AFTER"
+    git -C "$REPO_DIR" log --oneline "$BEFORE..$AFTER" | sed 's/^/  /'
+  fi
+fi
+
+[[ "$STATUS_ONLY" -eq 1 ]] && { log "Status-only mode — exiting"; exit 0; }
+
+# ---------------------------------------------------------------------------
+# 2. Re-apply user-level dotfiles (runs as the agent user, no root needed)
+# ---------------------------------------------------------------------------
+
+apply_as_agent() {
+  if [[ "$(id -un)" == "$AGENT_USER" ]]; then
+    "$@"
+  else
+    sudo -u "$AGENT_USER" "$@"
+  fi
+}
+
+log "Applying shell dotfiles…"
+for rc in zshrc zshenv; do
+  apply_as_agent install -m 0644 "$DOTFILES/shell/$rc" "$AGENT_HOME/.$rc"
+done
+
+log "Applying mise config (toolchain)…"
+apply_as_agent install -d -m 0755 "$AGENT_HOME/.config/mise"
+apply_as_agent install -m 0644 "$DOTFILES/mise.toml" "$AGENT_HOME/.config/mise/config.toml"
+
+log "Applying starship config…"
+apply_as_agent install -d -m 0755 "$AGENT_HOME/.config/starship"
+[[ -f "$DOTFILES/starship.toml" ]] && \
+  apply_as_agent install -m 0644 "$DOTFILES/starship.toml" "$AGENT_HOME/.config/starship/starship.toml"
+
+log "Applying bin scripts…"
+apply_as_agent install -d -m 0755 "$AGENT_HOME/.local/bin"
+apply_as_agent install -m 0755 "$DOTFILES/bin/goto2026-sync" "$AGENT_HOME/.local/bin/goto2026-sync"
+
+# ---------------------------------------------------------------------------
+# 3. (Optional) Re-apply system configs — requires root
+# ---------------------------------------------------------------------------
+
+if [[ "$APPLY_SYSTEM" -eq 1 ]]; then
+  [[ "$EUID" -eq 0 ]] || die "--apply-system requires root (run with sudo)"
+
+  log "Re-applying nginx config…"
+  install -m 0644 "$DOTFILES/desktop/openclaw-desktop.nginx" \
+    /etc/nginx/sites-available/openclaw-desktop
+  nginx -t && systemctl reload nginx
+  log "nginx reloaded"
+
+  log "Re-applying openclaw-tunnel-config.sh…"
+  install -m 0755 "$DOTFILES/tunnel/openclaw-tunnel-config.sh" \
+    /usr/local/sbin/openclaw-tunnel-config.sh
+
+  log "Re-applying systemd units…"
+  for unit in \
+    desktop/openclaw-desktop-vnc.service \
+    desktop/openclaw-desktop-novnc.service \
+    desktop/openclaw-desktop-cred.service \
+    tunnel/openclaw-tunnel.service \
+    firstboot/openclaw-firstboot.service; do
+    install -m 0644 "$DOTFILES/$unit" /etc/systemd/system/
+  done
+  systemctl daemon-reload
+  log "systemd units reloaded (use systemctl restart <unit> to apply changes)"
+fi
+
+log "Sync complete ✓"

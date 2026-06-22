@@ -261,6 +261,14 @@ phase_toolchain() {
       "$SCRIPT_DIR/shell/$rc" "$AGENT_HOME/.$rc"
   done
 
+  # goto2026-sync — pull-and-apply script so late changes to the masterclass
+  # repo (dotfiles, configs) can be pushed to all boxes without a full re-bake.
+  # Installed at bake so `goto2026-sync` is available on first boot.
+  log "Installing goto2026-sync script"
+  install -d -m 0755 "$AGENT_HOME/.local/bin"
+  install -m 0755 -o "$AGENT_USER" -g "$AGENT_USER" \
+    "$SCRIPT_DIR/bin/goto2026-sync" "$AGENT_HOME/.local/bin/goto2026-sync"
+
   # Starship prompt config (zshrc runs `starship init`; ~/.config/mise was
   # created above). Kept in dotfiles/ so a student can restyle their prompt.
   log "Installing starship prompt config for $AGENT_USER"
