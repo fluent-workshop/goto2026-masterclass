@@ -53,6 +53,7 @@ function hostnames(box: string): string[] {
   return [
     `${box}-${TUNNEL_PREFIX}-app.${DOMAIN}`,
     `${box}-${TUNNEL_PREFIX}-desktop-${h}.${DOMAIN}`,
+    `${box}-${TUNNEL_PREFIX}-code-${h}.${DOMAIN}`,
     `${box}-${TUNNEL_PREFIX}-supabase-studio-${h}.${DOMAIN}`,
     `${box}-${TUNNEL_PREFIX}-gateway-${h}.${DOMAIN}`,
     `${box}-${TUNNEL_PREFIX}-ssh-${h}.${DOMAIN}`,

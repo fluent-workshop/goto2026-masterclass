@@ -41,8 +41,24 @@ chgrp www-data "$HTPASSWD" 2>/dev/null || true
 chmod 0640 "$HTPASSWD"
 echo "openclaw-desktop-cred: wrote $HTPASSWD for user '$DESKTOP_USER'."
 
-# The plaintext password has now been consumed into the bcrypt htpasswd; remove
-# the cleartext credential so it does not persist on the box (m2). Subsequent
-# boots hit the "already provisioned" branch above and leave the htpasswd intact.
+# Write code-server config with the same password before we erase the env file.
+# code-server reads ~/.config/code-server/config.yaml on startup; writing it here
+# (as ubuntu) means the service can start without ever seeing the cleartext pass.
+CS_CONFIG="/home/ubuntu/.config/code-server/config.yaml"
+if [[ ! -f "$CS_CONFIG" ]]; then
+  install -d -o ubuntu -g ubuntu -m 0700 "$(dirname "$CS_CONFIG")"
+  cat > "$CS_CONFIG" <<CSEOF
+bind-addr: 127.0.0.1:8088
+auth: password
+password: ${DESKTOP_PASS}
+cert: false
+CSEOF
+  chown ubuntu:ubuntu "$CS_CONFIG"
+  chmod 0600 "$CS_CONFIG"
+  echo "openclaw-desktop-cred: wrote code-server config for user 'ubuntu'."
+fi
+
+# The plaintext password has now been consumed into the bcrypt htpasswd and the
+# code-server config; remove it so it does not persist on the box (m2).
 rm -f "$ENV_FILE"
 echo "openclaw-desktop-cred: removed $ENV_FILE (plaintext credential consumed)."

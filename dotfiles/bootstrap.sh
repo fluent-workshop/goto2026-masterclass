@@ -44,6 +44,8 @@ MISE_SHA256="${MISE_SHA256:-4c1036af15efea3a4d83f13481132ec7d7dda15e7ec5869dd70a
 # GitHub release. Verified current stable (released 2026-06-18). Bump
 # deliberately; tags at https://github.com/cloudflare/cloudflared/releases.
 CLOUDFLARED_VERSION="${CLOUDFLARED_VERSION:-2026.6.1}"
+# code-server (browser VS Code) — pinned .deb from GitHub. Bump deliberately.
+CODE_SERVER_VERSION="${CODE_SERVER_VERSION:-4.125.0}"
 # This lab is Ubuntu-only: the agent user is the stock Ubuntu cloud-image
 # `ubuntu` account (passwordless sudo + injected SSH key already present). It is
 # intentionally NOT env-overridable (m5) — the cloud-init layer hardcodes
@@ -444,9 +446,30 @@ phase_desktop() {
     install -m 0644 "$SCRIPT_DIR/desktop/$unit.service" "/etc/systemd/system/$unit.service"
   done
 
-  # NOTE: code-server (browser VS Code) is intentionally DEFERRED out of this lab
-  # — it is the one service genuinely dangerous to expose, and the editor path is
-  # the VS Code Remote Tunnel (devtunnel) instead, which needs no inbound ingress.
+  # code-server: browser VS Code on loopback:8088, password-protected via the
+  # per-box DESKTOP_PASS (written to ~/.config/code-server/config.yaml at first
+  # boot by openclaw-desktop-cred.sh). Previously deferred; now preferred over
+  # VS Code Remote Tunnel which requires GitHub OAuth per-student.
+  _cs_installed=""
+  if command -v code-server >/dev/null 2>&1; then
+    _cs_installed="$(code-server --version 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)" || true
+  fi
+  if [[ "$_cs_installed" != "$CODE_SERVER_VERSION" ]]; then
+    log "Installing code-server ${CODE_SERVER_VERSION} (pinned .deb)"
+    _cs_deb="$(mktemp --suffix=.deb)"
+    curl -fsSL -o "$_cs_deb" \
+      "https://github.com/coder/code-server/releases/download/v${CODE_SERVER_VERSION}/code-server_${CODE_SERVER_VERSION}_amd64.deb"
+    apt-get install -y -qq "$_cs_deb"
+    rm -f "$_cs_deb"
+  else
+    log "code-server ${CODE_SERVER_VERSION} already present — skipping"
+  fi
+
+  log "Installing code-server service unit"
+  install -m 0644 "$SCRIPT_DIR/desktop/openclaw-codeserver.service" \
+    /etc/systemd/system/openclaw-codeserver.service
+  systemctl daemon-reload
+  systemctl enable openclaw-codeserver.service
 
   log "Configuring nginx basic-auth reverse proxy for noVNC"
   # Auth-gated landing page served at `/` (static, so basic-auth applies — see the

@@ -1,0 +1,23 @@
+[Unit]
+Description=OpenClaw code-server (browser VS Code) for classroom use
+Documentation=https://coder.com/docs/code-server
+# Start after the cred service so ~/.config/code-server/config.yaml is present.
+After=network-online.target openclaw-desktop-cred.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+# config.yaml (written at first boot by openclaw-desktop-cred.service) supplies
+# bind-addr, auth=password, and the per-box password. The --config flag makes
+# that explicit so code-server never falls back to a generated config elsewhere.
+ExecStart=/usr/bin/code-server --config /home/ubuntu/.config/code-server/config.yaml
+Restart=on-failure
+RestartSec=5s
+# Isolate the process: no new privileges, private /tmp, read-only /usr.
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
