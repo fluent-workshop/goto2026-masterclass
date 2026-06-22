@@ -60,12 +60,60 @@ write_files:
       CLOUDFLARED_TOKEN="{{CLOUDFLARED_TOKEN}}"
       POSTGRES_APP_PASSWORD="{{POSTGRES_APP_PASSWORD}}"
 
+  # Pull-at-boot helper: clones the masterclass repo (or fast-forwards if it
+  # already exists) then runs goto2026-sync to apply current dotfiles, shell
+  # niceties, mise toolchain config, and OpenClaw skills.
+  #
+  # Why here instead of rebaking: the golden image carries all the heavy system
+  # packages (Docker, cloudflared, Node, openclaw). Lightweight changes — shell
+  # config, student scripts, skill files — are cheaper to pull from the public
+  # repo at first boot than to trigger a full 10-15 min rebake cycle. This
+  # also validates the goto2026-sync mechanism we use for event-day live updates.
+  #
+  # The script is deliberately defensive: any failure logs to
+  # /var/log/goto2026-pull-at-boot.log and exits 0 so cloud-init always
+  # completes. A partial failure won't brick a student box.
+  - path: /usr/local/sbin/goto2026-pull-at-boot.sh
+    owner: root:root
+    permissions: '0750'
+    content: |
+      #!/usr/bin/env bash
+      # Clones or pulls the masterclass repo, then runs goto2026-sync.
+      # Called by cloud-init runcmd on first boot. Safe to re-run.
+      set -euo pipefail
+      exec >> /var/log/goto2026-pull-at-boot.log 2>&1
+
+      REPO=/opt/goto2026-masterclass
+      REPO_URL=https://github.com/fluent-workshop/goto2026-masterclass.git
+
+      echo "[pull-at-boot] $(date -u +%FT%TZ) — starting"
+
+      if [[ -d "$REPO/.git" ]]; then
+        echo "[pull-at-boot] repo exists — pulling latest"
+        git -C "$REPO" pull --ff-only origin main
+      else
+        echo "[pull-at-boot] cloning $REPO_URL → $REPO"
+        git clone --depth=1 "$REPO_URL" "$REPO"
+      fi
+
+      echo "[pull-at-boot] fixing ownership ubuntu:ubuntu"
+      chown -R ubuntu:ubuntu "$REPO"
+
+      echo "[pull-at-boot] running goto2026-sync"
+      "$REPO/dotfiles/bin/goto2026-sync"
+
+      echo "[pull-at-boot] done"
+
 runcmd:
   # Make the hostname stick for prompts/support ("Pikachu is wedged").
   # Quoted so a hostname is never word-split or shell-interpreted here; clone.sh
   # additionally validates {{HOSTNAME}} against RFC 1123 before substitution (M2).
   - hostnamectl set-hostname "{{HOSTNAME}}"
   - sed -i "s/127.0.1.1.*/127.0.1.1 {{HOSTNAME}}/" /etc/hosts || true
+  # Pull-at-boot: clone the masterclass repo and apply current dotfiles/skills.
+  # Non-fatal (|| true) so a transient network hiccup never blocks cloud-init.
+  # Logs to /var/log/goto2026-pull-at-boot.log for post-boot inspection.
+  - /usr/local/sbin/goto2026-pull-at-boot.sh || true
   # Sanity self-check on first boot. Keep `|| true` so a doctor failure never
   # blocks cloud-init, but capture its output for debugging instead of discarding
   # it (m3). The `|| true` runs the whole redirected command, so the log is always
