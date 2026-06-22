@@ -262,7 +262,7 @@ ALLOW_STUB=1 TUNNEL_SECRETS_SOURCE=env TUNNEL_SALT=test123456789012 \
   OPENAI_API_KEY=sk-test ELEVENLABS_API_KEY=sk_test EXA_API_KEY=test \
   FIRECRAWL_API_KEY=fc-test CODERABBIT_API_KEY=cr-test \
   VSCODE_TUNNEL_GITHUB_TOKEN=ghp_test \
-  bun run infra/clone.sh pikachu &&
+  bash infra/clone.sh pikachu &&
 grep -q "student-keys.env" infra/cloud-init/generated/pikachu.cloud-init.yaml &&
 grep -q "code tunnel user login" infra/cloud-init/generated/pikachu.cloud-init.yaml &&
 echo "cloud-init render OK"
