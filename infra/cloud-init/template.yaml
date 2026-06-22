@@ -165,3 +165,73 @@ runcmd:
   # it (m3). The `|| true` runs the whole redirected command, so the log is always
   # written. Runs as `ubuntu` to match the bake's agent user (see note above).
   - sudo -u ubuntu openclaw doctor > /var/log/openclaw-doctor.log 2>&1 || true
+  # Patch OpenClaw config: Anthropic + OpenAI models, Whisper CLI as primary STT,
+  # ElevenLabs TTS with the per-box voice. Written here (not baked) because the
+  # API keys and voice ID are per-instance secrets.
+  - |
+    ANTHROPIC_KEY="$(cat /home/ubuntu/.openclaw/credentials/api-key 2>/dev/null)"
+    OPENAI_KEY="$(grep OPENAI_API_KEY /etc/openclaw/student-keys.env | cut -d'"' -f2)"
+    ELABS_KEY="$(grep ELEVENLABS_API_KEY /etc/openclaw/student-keys.env | cut -d'"' -f2)"
+    ELABS_VOICE="$(grep ELEVENLABS_VOICE_ID /etc/openclaw/student-keys.env | cut -d'"' -f2)"
+    cat > /tmp/oc-config-patch.json << OCEOF
+    {
+      "models": {
+        "providers": {
+          "anthropic": {
+            "apiKey": "$ANTHROPIC_KEY",
+            "timeoutSeconds": 1200,
+            "models": [
+              {"id":"claude-haiku-4-5","name":"Claude Haiku 4.5","api":"anthropic-messages","contextWindow":200000,"maxTokens":64000,"input":["text","image"],"cost":{"input":1,"output":5,"cacheRead":0.1,"cacheWrite":1.25}},
+              {"id":"claude-sonnet-4-6","name":"Claude Sonnet 4.6","api":"anthropic-messages","contextWindow":1000000,"maxTokens":128000,"reasoning":true,"input":["text","image"],"cost":{"input":3,"output":15,"cacheRead":0.3,"cacheWrite":3.75}},
+              {"id":"claude-opus-4-8","name":"Claude Opus 4.8","api":"anthropic-messages","contextWindow":1000000,"maxTokens":128000,"reasoning":true,"input":["text","image"],"cost":{"input":5,"output":25,"cacheRead":0.5,"cacheWrite":6.25}}
+            ]
+          },
+          "openai": {
+            "apiKey": "$OPENAI_KEY",
+            "baseUrl": "https://api.openai.com/v1",
+            "api": "openai-completions",
+            "timeoutSeconds": 1200,
+            "models": [
+              {"id":"gpt-5.1","name":"GPT-5.1","contextWindow":400000},
+              {"id":"gpt-5.1-mini","name":"GPT-5.1 Mini","contextWindow":400000},
+              {"id":"o1","name":"o1","reasoning":true,"contextWindow":200000}
+            ]
+          }
+        }
+      },
+      "agents": {
+        "defaults": {
+          "model": {"primary": "anthropic/claude-sonnet-4-6", "fallbacks": ["anthropic/claude-haiku-4-5"]}
+        }
+      },
+      "tools": {
+        "media": {
+          "audio": {
+            "enabled": true,
+            "timeoutSeconds": 120,
+            "models": [
+              {"type":"cli","command":"/usr/local/bin/whisper-transcribe","capabilities":["audio"]},
+              {"provider":"openai","model":"whisper-1","capabilities":["audio"]}
+            ]
+          }
+        }
+      },
+      "messages": {
+        "tts": {
+          "auto": "inbound",
+          "provider": "elevenlabs",
+          "modelOverrides": {"enabled": true, "allowVoice": true},
+          "providers": {
+            "elevenlabs": {
+              "apiKey": "$ELABS_KEY",
+              "modelId": "eleven_flash_v2_5",
+              "voiceSettings": {"speed": 1.0},
+              "speakerVoiceId": "$ELABS_VOICE"
+            }
+          }
+        }
+      }
+    }
+    OCEOF
+    sudo -u ubuntu openclaw config patch --file /tmp/oc-config-patch.json >> /var/log/openclaw-doctor.log 2>&1 || true
+    rm -f /tmp/oc-config-patch.json

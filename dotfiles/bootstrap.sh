@@ -719,11 +719,49 @@ phase_verify() {
   touch "$BAKE_STAMP_DIR/${FUNCNAME[0]}.done"
 }
 
+# ---- phase_whisper: local Whisper STT (no API key, baked model) -----------
+# Installs openai-whisper via pip3 so every box has a `whisper` CLI for local
+# speech-to-text. The tiny model (~75 MB) is pre-downloaded at bake time so
+# first boot never stalls on a model fetch. OpenClaw's audio config (dropped
+# by cloud-init) adds a type=cli entry pointing at this binary as the primary
+# STT path, with openai/whisper-1 as fallback when an API key is present.
+phase_whisper() {
+  if [[ "$FORCE" -ne 1 && -f "$BAKE_STAMP_DIR/${FUNCNAME[0]}.done" && "${FUNCNAME[0]}" != "$SELECTED_PHASE" ]]; then
+    log "${FUNCNAME[0]} already done (stamp present) — skipping"
+    return 0
+  fi
+
+  log "Installing openai-whisper + dependencies via pip3"
+  # torch CPU-only build keeps the footprint ~800 MB vs ~2 GB for CUDA.
+  pip3 install -q --no-cache-dir torch torchvision torchaudio \
+    --index-url https://download.pytorch.org/whl/cpu
+  pip3 install -q --no-cache-dir openai-whisper
+
+  log "Pre-downloading Whisper tiny model to ~/.cache/whisper (as $AGENT_USER)"
+  # Runs as the agent user so the model cache lands in /home/ubuntu/.cache/whisper
+  # and is readable by the service. --output_format txt to a throwaway dir is the
+  # cheapest way to trigger the model download without a real audio file.
+  as_agent python3 -c "import whisper; whisper.load_model('tiny')"
+
+  log "Writing /usr/local/bin/whisper-transcribe wrapper"
+  cat > /usr/local/bin/whisper-transcribe << 'WEOF'
+#!/usr/bin/env bash
+# Thin wrapper: transcribe $1 using the baked tiny model, print plain text to
+# stdout. OpenClaw's type=cli audio model feeds the audio path as $1.
+exec whisper "$1" --model tiny --output_format txt --output_dir /tmp --quiet 2>/dev/null \
+  && cat "/tmp/$(basename "$1" | sed 's/\.[^.]*$//')_transcription.txt" 2>/dev/null \
+  || whisper "$1" --model tiny --output_format txt --output_dir /tmp
+WEOF
+  chmod +x /usr/local/bin/whisper-transcribe
+
+  touch "$BAKE_STAMP_DIR/${FUNCNAME[0]}.done"
+}
+
 # ---- Dispatch -------------------------------------------------------------
 # A full bake runs every phase in order (skipping any already stamped done). A
 # `--phase <name>` run executes only that phase and forces it (bypasses its
 # stamp). `--force` re-runs every phase, ignoring all stamps.
-ALL_PHASES=(phase_base phase_toolchain phase_student_tools phase_vscode phase_desktop phase_tunnel phase_docker phase_verify)
+ALL_PHASES=(phase_base phase_toolchain phase_student_tools phase_vscode phase_desktop phase_whisper phase_tunnel phase_docker phase_verify)
 
 SELECTED_PHASE="${SELECTED_PHASE:-}"
 FORCE=0
