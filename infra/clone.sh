@@ -398,12 +398,24 @@ if [[ -f "$MANIFEST" ]]; then
 fi
 
 for host in "${hosts[@]}"; do
+  # Desktop password: instance-secrets.toml is the canonical source (so every
+  # box's creds live in one auditable place). Fall back to the old manifest for
+  # backward compat, then auto-generate if truly absent. --force skips both and
+  # rotates to a fresh password (also rewrites instance-secrets.toml via a note
+  # in the manifest — manual update still required for the TOML).
   pass=""
   if [[ "$FORCE" -eq 0 ]]; then
-    pass="$(existing_password "$host")"
+    # 1. Check instance-secrets.toml first (canonical)
+    pass="$(bun run --silent "$SCRIPT_DIR/scripts/toml-get.ts" \
+      "$REPO_ROOT/instance-secrets.toml" "$host" DESKTOP_PASS 2>/dev/null || true)"
+    # 2. Fall back to legacy credentials-manifest.tsv
+    if [[ -z "$pass" ]]; then
+      pass="$(existing_password "$host")"
+    fi
   fi
   if [[ -z "$pass" ]]; then
     pass="$(gen_password)"
+    warn "$host: DESKTOP_PASS not in instance-secrets.toml — generated new password. Add to [${host}] section: DESKTOP_PASS = \"${pass}\""
   fi
 
   # --- Bun helpers: TOML extraction + secret validation + template rendering ---
