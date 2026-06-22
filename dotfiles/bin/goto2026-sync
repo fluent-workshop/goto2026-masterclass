@@ -84,6 +84,15 @@ log "Applying mise config (toolchain)…"
 apply_as_agent install -d -m 0755 "$AGENT_HOME/.config/mise"
 apply_as_agent install -m 0644 "$DOTFILES/mise.toml" "$AGENT_HOME/.config/mise/config.toml"
 
+# Actually install any newly-declared tools. Without this, copying mise.toml only
+# updates the config — new tools (added to the toolchain and pushed to the repo)
+# wouldn't land until someone ran `mise install` by hand. Running it here makes
+# the sync (and pull-at-boot, which calls this script) self-contained for
+# toolchain updates: push a tool to mise.toml → run the sync → it appears.
+# Non-fatal so a transient download hiccup never aborts the rest of the sync.
+log "Running mise install to apply toolchain changes…"
+apply_as_agent mise install --yes 2>&1 | sed 's/^/  /' || true
+
 log "Applying starship config…"
 apply_as_agent install -d -m 0755 "$AGENT_HOME/.config/starship"
 [[ -f "$DOTFILES/starship.toml" ]] && \
