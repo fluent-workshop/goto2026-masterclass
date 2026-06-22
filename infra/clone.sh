@@ -29,10 +29,19 @@
 # manifest for a host (so already-distributed creds stay valid) and only
 # generates one for hosts that don't have one yet. Pass --force to rotate all.
 #
+# Provisioning (GCP): rendering is the default and is side-effect-free. Pass
+# --provision (or PROVISION=1) to ALSO create one GCP instance per rendered host
+# from the golden image, injecting that host's cloud-init as the `user-data`
+# metadata key (GCE's cloud-init datasource reads it). This creates BILLABLE
+# infrastructure, hence opt-in. We pivoted off Hetzner (dedicated vCPU quota) to
+# GCP project goto2026-masterclass-500200; the golden image family is
+# goto2026-golden (see loop-014).
+#
 # Usage:
 #   infra/clone.sh                 # render every host in instances.txt
 #   infra/clone.sh pikachu gengar  # render only these (handy for a test host)
 #   infra/clone.sh --force         # rotate every desktop password
+#   infra/clone.sh pikachu --provision   # render + create the GCP instance(s)
 #
 # Env:
 #   DESKTOP_USER            override the desktop username (default: student)
@@ -47,6 +56,17 @@
 #   OP_TUNNEL_SALT_ITEM     used when TUNNEL_SECRETS_SOURCE=op (op:// ref)
 #   OP_CLOUDFLARED_TOKEN_ITEM   used when TUNNEL_SECRETS_SOURCE=op (op:// ref)
 #   (POSTGRES_APP_PASSWORD is per-instance from instance-secrets.toml)
+#
+#   PROVISION               1 to create GCP instances after rendering (else 0)
+#   GCP_PROJECT             GCP project (default: goto2026-masterclass-500200)
+#   GCP_ZONE                instance zone (default: us-central1-a)
+#   GCP_MACHINE_TYPE        machine type (default: n2-standard-8)
+#   GCP_IMAGE_FAMILY        golden image family (default: goto2026-golden)
+#   GCP_DISK_SIZE           boot disk size (default: 256GB)
+#   GCP_DISK_TYPE           boot disk type (default: pd-balanced)
+#   GCP_INSTANCE_PREFIX     instance name prefix (default: goto-)
+#   GCP_SSH_USER            admin login injected via ssh-keys (default: cedric)
+#   GCP_SSH_PUBKEY_PATH     admin public key (default: ~/.ssh/id_ed25519.pub)
 
 set -euo pipefail
 
@@ -64,6 +84,20 @@ OPENCLAW_API_KEY_SOURCE="${OPENCLAW_API_KEY_SOURCE:-stub}"
 TUNNEL_SECRETS_SOURCE="${TUNNEL_SECRETS_SOURCE:-stub}"
 ALLOW_STUB="${ALLOW_STUB:-0}"
 FORCE=0
+PROVISION="${PROVISION:-0}"
+
+# GCP provisioning config (only consulted when --provision / PROVISION=1). We
+# pivoted off Hetzner to GCP project goto2026-masterclass-500200; the golden
+# image lives in the SAME project, so --image-project == GCP_PROJECT.
+GCP_PROJECT="${GCP_PROJECT:-goto2026-masterclass-500200}"
+GCP_ZONE="${GCP_ZONE:-us-central1-a}"
+GCP_MACHINE_TYPE="${GCP_MACHINE_TYPE:-n2-standard-8}"
+GCP_IMAGE_FAMILY="${GCP_IMAGE_FAMILY:-goto2026-golden}"
+GCP_DISK_SIZE="${GCP_DISK_SIZE:-256GB}"
+GCP_DISK_TYPE="${GCP_DISK_TYPE:-pd-balanced}"
+GCP_INSTANCE_PREFIX="${GCP_INSTANCE_PREFIX:-goto-}"
+GCP_SSH_USER="${GCP_SSH_USER:-cedric}"
+GCP_SSH_PUBKEY_PATH="${GCP_SSH_PUBKEY_PATH:-$HOME/.ssh/id_ed25519.pub}"
 
 # Validation patterns for values that flow into YAML and shell on the box.
 #   - hostname: RFC 1123 label (lowercase, starts alnum-letter, 2-63 chars).
@@ -200,12 +234,56 @@ fetch_instance_secret() {
 fetch_instance_password() { fetch_instance_secret "$1" 'POSTGRES_APP_PASSWORD'; }
 fetch_instance_cloudflared_token() { fetch_instance_secret "$1" 'CLOUDFLARED_TOKEN'; }
 
+# Create one GCP instance per rendered host from the golden image family. The
+# rendered cloud-init is injected as the `user-data` metadata key (GCE cloud-init
+# reads it); OS Login is disabled and an admin ssh-key is added so the box stays
+# reachable for verification. Opt-in (PROVISION=1) because it is billable. The
+# golden image lives in GCP_PROJECT, so --image-project == GCP_PROJECT.
+provision_gcp() {
+  command -v gcloud >/dev/null 2>&1 || die "PROVISION=1 but gcloud is not installed"
+  gcloud compute images describe-from-family "$GCP_IMAGE_FAMILY" \
+    --project "$GCP_PROJECT" >/dev/null 2>&1 \
+    || die "golden image family '$GCP_IMAGE_FAMILY' not found in project $GCP_PROJECT"
+
+  # Optional admin ssh-key metadata (so we can SSH in to verify the fleet).
+  local ssh_meta=""
+  if [[ -r "$GCP_SSH_PUBKEY_PATH" ]]; then
+    ssh_meta="${GCP_SSH_USER}:$(tr -d '\n' < "$GCP_SSH_PUBKEY_PATH")"
+  else
+    warn "GCP_SSH_PUBKEY_PATH ($GCP_SSH_PUBKEY_PATH) not readable — instances will have no admin ssh-key (use 'gcloud compute ssh')."
+  fi
+
+  local host out name
+  for host in "${hosts[@]}"; do
+    out="$OUT_DIR/$host.cloud-init.yaml"
+    [[ -f "$out" ]] || die "no rendered cloud-init for '$host' at $out"
+    name="${GCP_INSTANCE_PREFIX}${host}"
+    echo "clone.sh: creating GCP instance $name ($GCP_MACHINE_TYPE, $GCP_ZONE) from family $GCP_IMAGE_FAMILY"
+    local meta="enable-oslogin=FALSE"
+    [[ -n "$ssh_meta" ]] && meta="${meta},ssh-keys=${ssh_meta}"
+    gcloud compute instances create "$name" \
+      --project "$GCP_PROJECT" \
+      --zone "$GCP_ZONE" \
+      --machine-type "$GCP_MACHINE_TYPE" \
+      --image-family "$GCP_IMAGE_FAMILY" \
+      --image-project "$GCP_PROJECT" \
+      --boot-disk-size "$GCP_DISK_SIZE" \
+      --boot-disk-type "$GCP_DISK_TYPE" \
+      --metadata-from-file "user-data=$out" \
+      --metadata "$meta" \
+      --labels "project=goto-2026,hostname=$host" \
+      || die "gcloud create failed for $name"
+  done
+  echo "clone.sh: provisioned ${#hosts[@]} GCP instance(s) from $GCP_IMAGE_FAMILY in $GCP_PROJECT"
+}
+
 # --- arg parse ---------------------------------------------------------------
 hosts=()
 for a in "$@"; do
   case "$a" in
     --force) FORCE=1 ;;
-    -h|--help) sed -n '2,52p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    --provision) PROVISION=1 ;;
+    -h|--help) sed -n '2,/^set -euo pipefail$/p' "${BASH_SOURCE[0]}"; exit 0 ;;
     --*) die "unknown flag: $a" ;;
     *) hosts+=("$a") ;;
   esac
@@ -314,3 +392,10 @@ echo "clone.sh: ${#hosts[@]} host(s) rendered to $OUT_DIR"
 echo "clone.sh: credential manifest at $MANIFEST (SECRET — gitignored)"
 echo "clone.sh: TUNNEL_SALT fleet-wide (source=$TUNNEL_SECRETS_SOURCE); CLOUDFLARED_TOKEN per-instance from instance-secrets.toml"
 echo "clone.sh: POSTGRES_APP_PASSWORD per-instance from instance-secrets.toml"
+
+# --- optional: provision GCP instances from the golden image -----------------
+if [[ "$PROVISION" == "1" ]]; then
+  provision_gcp
+else
+  echo "clone.sh: render-only (pass --provision or PROVISION=1 to create GCP instances)"
+fi
