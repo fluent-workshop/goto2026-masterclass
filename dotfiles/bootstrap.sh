@@ -250,7 +250,7 @@ phase_toolchain() {
   # `User=ubuntu` does) so resolution never depends on that fallback.
   log "Symlinking mise shims into /usr/local/bin"
   ln -sf "$MISE_BIN" /usr/local/bin/mise
-  for shim in node npm npx openclaw bun; do
+  for shim in node npm npx openclaw bun uv; do
     ln -sf "$SHIMS_DIR/$shim" "/usr/local/bin/$shim"
   done
 
