@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # infra/clone.sh — render the per-instance cloud-init for the GOTO 2026 lab.
 #
-# For each host (instances.txt by default, or hostnames passed as args) this
-# substitutes ALL placeholders in infra/cloud-init/template.yaml:
-#     {{HOSTNAME}} {{OPENCLAW_API_KEY_B64}} {{DESKTOP_USER}} {{DESKTOP_PASS}}
+# For each host (instances.toml roster by default, or hostnames passed as args)
+# this substitutes ALL placeholders in infra/cloud-init/template.yaml:
+#     {{HOSTNAME}} {{ANTHROPIC_API_KEY_B64}} {{DESKTOP_USER}} {{DESKTOP_PASS}}
 #     {{TUNNEL_SALT}} {{CLOUDFLARED_TOKEN}} {{POSTGRES_APP_PASSWORD}}
+#     {{ELEVENLABS_VOICE_ID}} (per-box) and the fleet-wide student keys
+#     {{OPENAI_API_KEY}} {{ELEVENLABS_API_KEY}} {{EXA_API_KEY}}
+#     {{FIRECRAWL_API_KEY}} {{CODERABBIT_API_KEY}} {{VSCODE_TUNNEL_GITHUB_TOKEN}}
 # and writes a ready-to-boot cloud-init file plus a credential manifest into a
 # GITIGNORED output dir (infra/cloud-init/generated/). The golden snapshot has
 # NO student secret in it; this script is the only place per-box secrets exist,
@@ -17,16 +20,23 @@
 #   The baked openclaw-desktop-cred.service consumes /etc/openclaw/desktop.env
 #   at first boot and builds the nginx bcrypt htpasswd from it.
 #
-# OpenClaw API key: sourced via a documented STUB here (real provisioning is the
-# credential-bag loop). Default source emits a clearly-fake placeholder so no
-# real key is ever required to render; override OPENCLAW_API_KEY_SOURCE=env|op.
+# Anthropic API key: read PER-BOX from instance-secrets.toml (like CLOUDFLARED_TOKEN),
+# b64-encoded into /home/ubuntu/.openclaw/credentials/api-key. Each box gets its
+# own key for billing isolation. When a box's section has no ANTHROPIC_API_KEY and
+# ALLOW_STUB=1, a clearly-fake placeholder is rendered (dev/test only).
+#
+# Fleet-wide student keys (OPENAI_API_KEY, ELEVENLABS_API_KEY, EXA_API_KEY,
+# FIRECRAWL_API_KEY, CODERABBIT_API_KEY, VSCODE_TUNNEL_GITHUB_TOKEN) come from the
+# ENVIRONMENT (e.g. .envrc.local), same as TUNNEL_SALT — one shared value across the
+# fleet, read once. ALLOW_STUB=1 substitutes obvious placeholders for any unset one.
 #
 # TUNNEL_SALT is FLEET-WIDE (the same value on every box; it only salts the
-# per-box hostname hash). CLOUDFLARED_TOKEN and POSTGRES_APP_PASSWORD are
-# PER-INSTANCE: each box has its OWN Cloudflare Tunnel token and its own Postgres
-# password, both read from instance-secrets.toml (a gitignored file at repo root)
-# keyed by hostname. Both are validated against a strict charset before they are
-# written into a cloud-init .env that is later sourced by root on the box.
+# per-box hostname hash). CLOUDFLARED_TOKEN, POSTGRES_APP_PASSWORD and
+# ANTHROPIC_API_KEY are PER-INSTANCE, read from instance-secrets.toml (a gitignored
+# file at repo root) keyed by hostname. ELEVENLABS_VOICE_ID is per-box too but
+# NON-sensitive, so it lives in instances.toml (git-tracked). Per-instance secrets
+# are validated against a strict charset before they are written into a cloud-init
+# .env that is later sourced by root on the box.
 #
 # Idempotent: re-running reuses any desktop password already recorded in the
 # manifest for a host (so already-distributed creds stay valid) and only
@@ -41,24 +51,29 @@
 # goto2026-golden (see loop-014).
 #
 # Usage:
-#   infra/clone.sh                 # render every host in instances.txt
+#   infra/clone.sh                 # render every host in instances.toml
 #   infra/clone.sh pikachu gengar  # render only these (handy for a test host)
 #   infra/clone.sh --force         # rotate every desktop password
 #   infra/clone.sh pikachu --provision   # render + create the GCP instance(s)
 #
 # Env:
 #   DESKTOP_USER            override the desktop username (default: student)
-#   OPENCLAW_API_KEY_SOURCE stub (default) | env | op
-#   ALLOW_STUB              set to 1 to permit a stub source (dev/test only); gates
-#                           BOTH the API key and the tunnel-secrets stub
-#   OPENCLAW_API_KEY        used when OPENCLAW_API_KEY_SOURCE=env
-#   OP_API_KEY_ITEM         used when OPENCLAW_API_KEY_SOURCE=op (op:// ref)
+#   ALLOW_STUB              set to 1 to permit stub values (dev/test only); gates
+#                           the per-box Anthropic key, the tunnel-secrets stub, and
+#                           any unset fleet-wide student key
 #   TUNNEL_SECRETS_SOURCE   stub (default) | env | op  (governs ONLY the
 #                           fleet-wide TUNNEL_SALT below)
 #   TUNNEL_SALT             used when TUNNEL_SECRETS_SOURCE=env (alphanumeric)
 #   OP_TUNNEL_SALT_ITEM     used when TUNNEL_SECRETS_SOURCE=op (op:// ref)
-#   (CLOUDFLARED_TOKEN and POSTGRES_APP_PASSWORD are PER-INSTANCE, read from
-#    instance-secrets.toml — NOT from TUNNEL_SECRETS_SOURCE)
+#   OPENAI_API_KEY          fleet-wide student key (from env, e.g. .envrc.local)
+#   ELEVENLABS_API_KEY      fleet-wide student key (from env)
+#   EXA_API_KEY             fleet-wide student key (from env)
+#   FIRECRAWL_API_KEY       fleet-wide student key (from env)
+#   CODERABBIT_API_KEY      fleet-wide student key (from env)
+#   VSCODE_TUNNEL_GITHUB_TOKEN  fleet-wide GitHub PAT for VS Code tunnel pre-auth
+#   (CLOUDFLARED_TOKEN, POSTGRES_APP_PASSWORD and ANTHROPIC_API_KEY are
+#    PER-INSTANCE, read from instance-secrets.toml — NOT from TUNNEL_SECRETS_SOURCE;
+#    ELEVENLABS_VOICE_ID is per-box from instances.toml)
 #
 #   PROVISION               1 to create GCP instances after rendering (else 0)
 #   GCP_PROJECT             GCP project (default: goto2026-masterclass-500200)
@@ -82,13 +97,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 TEMPLATE="$SCRIPT_DIR/cloud-init/template.yaml"
-INSTANCES="$REPO_ROOT/instances.txt"
+INSTANCES="$REPO_ROOT/instances.toml"
 OUT_DIR="$SCRIPT_DIR/cloud-init/generated"
 MANIFEST="$OUT_DIR/credentials-manifest.tsv"
 
 # --- config ------------------------------------------------------------------
 DESKTOP_USER="${DESKTOP_USER:-student}"
-OPENCLAW_API_KEY_SOURCE="${OPENCLAW_API_KEY_SOURCE:-stub}"
 TUNNEL_SECRETS_SOURCE="${TUNNEL_SECRETS_SOURCE:-stub}"
 ALLOW_STUB="${ALLOW_STUB:-0}"
 FORCE=0
@@ -137,30 +151,20 @@ gen_password() {
   head -c 20 < <(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom)
 }
 
-# Documented stub for the per-instance OpenClaw API key. The credential-bag loop
-# replaces this with a real lookup; until then `stub` keeps rendering secret-free.
-fetch_api_key() {
-  local host="$1"
-  case "$OPENCLAW_API_KEY_SOURCE" in
-    stub)
-      printf 'REPLACE_ME__openclaw_api_key_for_%s' "$host"
-      ;;
-    env)
-      [[ -n "${OPENCLAW_API_KEY:-}" ]] \
-        || die "OPENCLAW_API_KEY_SOURCE=env but OPENCLAW_API_KEY is unset"
-      printf '%s' "$OPENCLAW_API_KEY"
-      ;;
-    op)
-      command -v op >/dev/null 2>&1 \
-        || die "OPENCLAW_API_KEY_SOURCE=op but the 1Password CLI (op) is not installed"
-      [[ -n "${OP_API_KEY_ITEM:-}" ]] \
-        || die "OPENCLAW_API_KEY_SOURCE=op but OP_API_KEY_ITEM (op:// ref) is unset"
-      op read "$OP_API_KEY_ITEM"
-      ;;
-    *)
-      die "unknown OPENCLAW_API_KEY_SOURCE='$OPENCLAW_API_KEY_SOURCE' (want: stub|env|op)"
-      ;;
-  esac
+# Read a fleet-wide student key from the environment (e.g. .envrc.local), the same
+# pattern as TUNNEL_SALT: one shared value across all 14 boxes, read ONCE. If the
+# env var is unset, emit an obvious placeholder when ALLOW_STUB=1 (dev/test) or die
+# loudly otherwise — a fleet render that forgot a real key must never silently ship.
+# Args: human label, env var NAME (read indirectly), stub placeholder.
+fetch_fleet_secret() {
+  local label="$1" env_var="$2" stub="$3"
+  if [[ -n "${!env_var:-}" ]]; then
+    printf '%s' "${!env_var}"
+  elif [[ "$ALLOW_STUB" == "1" ]]; then
+    printf '%s' "$stub"
+  else
+    die "fleet-wide key $env_var ($label) is unset. Export it (e.g. in .envrc.local) or set ALLOW_STUB=1 for dev/test only."
+  fi
 }
 
 # Fetch a fleet-wide tunnel secret per TUNNEL_SECRETS_SOURCE. Generic over the
@@ -201,14 +205,7 @@ existing_password() {
 }
 
 # --- validate config ---------------------------------------------------------
-# Fail fast on a stub key (M5): the stub renders a placeholder that passes the
-# unsubstituted-placeholder check, so a fleet render that forgot to set a real
-# source would silently ship 14 broken boxes. Require an explicit opt-in.
-if [[ "$OPENCLAW_API_KEY_SOURCE" == "stub" && "$ALLOW_STUB" != "1" ]]; then
-  die "stub API key source requires ALLOW_STUB=1. Set a real key source (OPENCLAW_API_KEY_SOURCE=env|op) or ALLOW_STUB=1 for dev/test only."
-fi
-
-# Same fail-fast gate for the tunnel-secrets stub: a stub salt/token renders a
+# Fail-fast gate for the tunnel-secrets stub: a stub salt/token renders a
 # placeholder that passes the unsubstituted-placeholder check, so a fleet render
 # that forgot a real source would ship 14 boxes with a dead Cloudflare connector.
 if [[ "$TUNNEL_SECRETS_SOURCE" == "stub" && "$ALLOW_STUB" != "1" ]]; then
@@ -229,9 +226,34 @@ tunnel_salt="$(fetch_tunnel_secret 'TUNNEL_SALT' \
 # Salt lands in a shell .env — keep it strictly hex/alphanumeric.
 [[ "$tunnel_salt" =~ $TUNNEL_SALT_RE ]] \
   || die "invalid TUNNEL_SALT (must match $TUNNEL_SALT_RE — hex/alphanumeric, 8-128 chars)"
+
+# Read the fleet-wide student keys ONCE (same value on every box). These come from
+# the environment (.envrc.local), validated for presence here; an unset one is a
+# hard error unless ALLOW_STUB=1 (which substitutes the obvious placeholder below).
+openai_api_key="$(fetch_fleet_secret 'OPENAI_API_KEY' OPENAI_API_KEY 'REPLACE_ME__openai_api_key')"
+elevenlabs_api_key="$(fetch_fleet_secret 'ELEVENLABS_API_KEY' ELEVENLABS_API_KEY 'REPLACE_ME__elevenlabs_api_key')"
+exa_api_key="$(fetch_fleet_secret 'EXA_API_KEY' EXA_API_KEY 'REPLACE_ME__exa_api_key')"
+firecrawl_api_key="$(fetch_fleet_secret 'FIRECRAWL_API_KEY' FIRECRAWL_API_KEY 'REPLACE_ME__firecrawl_api_key')"
+coderabbit_api_key="$(fetch_fleet_secret 'CODERABBIT_API_KEY' CODERABBIT_API_KEY 'REPLACE_ME__coderabbit_api_key')"
+# VSCODE_TUNNEL_GITHUB_TOKEN is fleet-wide too but firstboot-only (consumed by the
+# runcmd `code tunnel user login`); it is NOT exposed in student-keys.env.
+vscode_tunnel_github_token="$(fetch_fleet_secret 'VSCODE_TUNNEL_GITHUB_TOKEN' VSCODE_TUNNEL_GITHUB_TOKEN 'REPLACE_ME__vscode_tunnel_github_token')"
+
+# Reject CR/LF in any fleet key up front (defense in depth): they flow into a
+# sourced .env (student-keys.env) and a runcmd line, so an embedded newline is
+# almost always a copy-paste artifact and must fail loudly, not corrupt the YAML.
+for _fk in "$openai_api_key" "$elevenlabs_api_key" "$exa_api_key" \
+           "$firecrawl_api_key" "$coderabbit_api_key" "$vscode_tunnel_github_token"; do
+  [[ "$_fk" == *$'\n'* || "$_fk" == *$'\r'* ]] \
+    && die "a fleet-wide student key contains CR/LF; refusing to render"
+done
+
 INSTANCE_SECRETS="$REPO_ROOT/instance-secrets.toml"
 [[ -f "$INSTANCE_SECRETS" ]] \
   || die "instance-secrets.toml not found at $INSTANCE_SECRETS"
+INSTANCES_ROSTER="$REPO_ROOT/instances.toml"
+[[ -f "$INSTANCES_ROSTER" ]] \
+  || die "instances.toml not found at $INSTANCES_ROSTER"
 
 # Parse a per-instance value from instance-secrets.toml.
 # Sections look like: [pikachu] / KEY = "value"
@@ -328,14 +350,14 @@ done
 
 [[ -f "$TEMPLATE" ]] || die "template not found: $TEMPLATE"
 
-# Default host list = instances.txt (strip comments / blanks / whitespace).
+# Default host list = the section names in instances.toml (the canonical roster).
+# toml-get --sections emits a JSON array of hostnames; jq splits it to lines.
 if [[ ${#hosts[@]} -eq 0 ]]; then
-  [[ -f "$INSTANCES" ]] || die "instances.txt not found: $INSTANCES"
+  [[ -f "$INSTANCES" ]] || die "instances.toml not found: $INSTANCES"
   while IFS= read -r line; do
-    line="${line%%#*}"
-    line="${line//[[:space:]]/}"
     [[ -n "$line" ]] && hosts+=("$line")
-  done < "$INSTANCES"
+  done < <(bun run --silent "$SCRIPT_DIR/scripts/toml-get.ts" "$INSTANCES" --sections \
+             | jq -r '.[]')
 fi
 [[ ${#hosts[@]} -gt 0 ]] || die "no hosts to render"
 
@@ -384,26 +406,34 @@ for host in "${hosts[@]}"; do
     pass="$(gen_password)"
   fi
 
-  api_key="$(fetch_api_key "$host")"
+  # --- Bun helpers: TOML extraction + secret validation + template rendering ---
+  # toml-get reads instance-secrets.toml / instances.toml properly (no fragile
+  # sed/grep parser). validate-secrets checks token shape and shell-safety before
+  # anything hits the cloud-init template. render-template substitutes all
+  # {{PLACEHOLDERS}} safely (split/join — no regex special-char hazards in the
+  # replacement values). All three live in infra/scripts/ and speak JSON/text.
+
+  # Per-box ANTHROPIC_API_KEY from instance-secrets.toml (like CLOUDFLARED_TOKEN).
+  # toml-get exits non-zero if the section lacks the key; under ALLOW_STUB=1 that
+  # becomes an obvious placeholder (dev/test), otherwise it's a hard error — every
+  # real box must carry its own key for billing isolation.
+  if anthropic_api_key="$(bun run --silent "$SCRIPT_DIR/scripts/toml-get.ts" \
+       "$REPO_ROOT/instance-secrets.toml" "$host" ANTHROPIC_API_KEY 2>/dev/null)"; then
+    anthropic_key_source="instance-secrets.toml"
+  elif [[ "$ALLOW_STUB" == "1" ]]; then
+    anthropic_api_key="REPLACE_ME__anthropic_api_key_for_${host}"
+    anthropic_key_source="stub"
+  else
+    die "ANTHROPIC_API_KEY for '$host' not found in instance-secrets.toml. Add it to the [$host] section or set ALLOW_STUB=1 for dev/test only."
+  fi
   # Reject CR/LF in the key up front (M3): defense in depth even though the key
   # is base64-encoded below — a newline in the source key is almost always a
   # copy-paste artifact, and failing loudly beats silently encoding a bad key.
-  [[ "$api_key" == *$'\n'* || "$api_key" == *$'\r'* ]] \
-    && die "OpenClaw API key for '$host' contains CR/LF; refusing to render"
+  [[ "$anthropic_api_key" == *$'\n'* || "$anthropic_api_key" == *$'\r'* ]] \
+    && die "Anthropic API key for '$host' contains CR/LF; refusing to render"
   # Encode as a single base64 line so it lands in the cloud-init write_files
   # block (encoding: b64) as one safe scalar regardless of the key's bytes.
-  api_key_b64="$(printf '%s' "$api_key" | base64 | tr -d '\n')"
-
-  rendered="${template//\{\{HOSTNAME\}\}/$host}"
-  rendered="${rendered//\{\{OPENCLAW_API_KEY_B64\}\}/$api_key_b64}"
-  rendered="${rendered//\{\{DESKTOP_USER\}\}/$DESKTOP_USER}"
-  rendered="${rendered//\{\{DESKTOP_PASS\}\}/$pass}"
-  # --- Bun helpers: TOML extraction + secret validation + template rendering ---
-  # toml-get reads instance-secrets.toml properly (no fragile sed/grep parser).
-  # validate-secrets checks token shape and shell-safety before anything hits
-  # the cloud-init template. render-template substitutes all {{PLACEHOLDERS}}
-  # safely (split/join — no regex special-char hazards in replacement values).
-  # All three live in infra/scripts/ and speak JSON/text on stdout.
+  anthropic_api_key_b64="$(printf '%s' "$anthropic_api_key" | base64 | tr -d '\n')"
 
   # Extract per-instance secrets via toml-get (fails loudly if section/key missing)
   cloudflared_token="$(bun run --silent "$SCRIPT_DIR/scripts/toml-get.ts" \
@@ -411,7 +441,12 @@ for host in "${hosts[@]}"; do
   postgres_app_password="$(bun run --silent "$SCRIPT_DIR/scripts/toml-get.ts" \
     "$REPO_ROOT/instance-secrets.toml" "$host" POSTGRES_APP_PASSWORD)"
 
-  # Validate secrets before they touch the template (exit 1 on any failure)
+  # Per-box ElevenLabs voice ID — NON-sensitive, from the git-tracked roster.
+  elevenlabs_voice_id="$(bun run --silent "$SCRIPT_DIR/scripts/toml-get.ts" \
+    "$INSTANCES_ROSTER" "$host" elevenlabs_voice_id)"
+
+  # Validate secrets before they touch the template (exit 1 on any failure).
+  # Now also validates ANTHROPIC_API_KEY shape when present in the section.
   bun run --silent "$SCRIPT_DIR/scripts/validate-secrets.ts" \
     "$REPO_ROOT/instance-secrets.toml" "$host" "$tunnel_salt" \
     || die "secret validation failed for '$host' — see above"
@@ -420,23 +455,33 @@ for host in "${hosts[@]}"; do
   out="$OUT_DIR/$host.cloud-init.yaml"
   data="$(jq -n \
     --arg hn  "$host" \
-    --arg ak  "$api_key_b64" \
+    --arg ak  "$anthropic_api_key_b64" \
     --arg du  "$DESKTOP_USER" \
     --arg dp  "$pass" \
     --arg ts  "$tunnel_salt" \
     --arg ct  "$cloudflared_token" \
     --arg pp  "$postgres_app_password" \
-    '{HOSTNAME:$hn,OPENCLAW_API_KEY_B64:$ak,DESKTOP_USER:$du,DESKTOP_PASS:$dp,
-      TUNNEL_SALT:$ts,CLOUDFLARED_TOKEN:$ct,POSTGRES_APP_PASSWORD:$pp}')"
+    --arg vi  "$elevenlabs_voice_id" \
+    --arg oa  "$openai_api_key" \
+    --arg ea  "$elevenlabs_api_key" \
+    --arg xa  "$exa_api_key" \
+    --arg fa  "$firecrawl_api_key" \
+    --arg ca  "$coderabbit_api_key" \
+    --arg vt  "$vscode_tunnel_github_token" \
+    '{HOSTNAME:$hn,ANTHROPIC_API_KEY_B64:$ak,DESKTOP_USER:$du,DESKTOP_PASS:$dp,
+      TUNNEL_SALT:$ts,CLOUDFLARED_TOKEN:$ct,POSTGRES_APP_PASSWORD:$pp,
+      ELEVENLABS_VOICE_ID:$vi,OPENAI_API_KEY:$oa,ELEVENLABS_API_KEY:$ea,
+      EXA_API_KEY:$xa,FIRECRAWL_API_KEY:$fa,CODERABBIT_API_KEY:$ca,
+      VSCODE_TUNNEL_GITHUB_TOKEN:$vt}')"
   bun run --silent "$SCRIPT_DIR/scripts/render-template.ts" \
     "$TEMPLATE" --data "$data" > "$out" \
     || die "template rendering failed for '$host'"
   chmod 0600 "$out"
 
   printf '%s\t%s\t%s\t%s\n' \
-    "$host" "$DESKTOP_USER" "$pass" "$OPENCLAW_API_KEY_SOURCE" >> "$tmp_manifest"
+    "$host" "$DESKTOP_USER" "$pass" "$anthropic_key_source" >> "$tmp_manifest"
 
-  echo "rendered $out (user=$DESKTOP_USER, api_key_source=$OPENCLAW_API_KEY_SOURCE)"
+  echo "rendered $out (user=$DESKTOP_USER, anthropic_key_source=$anthropic_key_source)"
 done
 
 mv "$tmp_manifest" "$MANIFEST"
@@ -446,7 +491,8 @@ chmod 0600 "$MANIFEST"
 echo "clone.sh: ${#hosts[@]} host(s) rendered to $OUT_DIR"
 echo "clone.sh: credential manifest at $MANIFEST (SECRET — gitignored)"
 echo "clone.sh: TUNNEL_SALT fleet-wide (source=$TUNNEL_SECRETS_SOURCE); CLOUDFLARED_TOKEN per-instance from instance-secrets.toml"
-echo "clone.sh: POSTGRES_APP_PASSWORD per-instance from instance-secrets.toml"
+echo "clone.sh: POSTGRES_APP_PASSWORD + ANTHROPIC_API_KEY per-instance from instance-secrets.toml"
+echo "clone.sh: ELEVENLABS_VOICE_ID per-instance from instances.toml; fleet student keys from env"
 
 # --- optional: provision GCP instances from the golden image -----------------
 if [[ "$PROVISION" == "1" ]]; then

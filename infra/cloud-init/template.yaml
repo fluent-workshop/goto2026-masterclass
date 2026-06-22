@@ -1,11 +1,15 @@
 #cloud-config
 # Per-instance cloud-init template for GOTO 2026 student VPS.
-# The placeholders HOSTNAME, OPENCLAW_API_KEY, DESKTOP_USER, DESKTOP_PASS,
-# TUNNEL_SALT, CLOUDFLARED_TOKEN and POSTGRES_APP_PASSWORD (each wrapped in
-# double braces below) are substituted by infra/clone.sh at create time, per row
-# in instances.txt. TUNNEL_SALT / CLOUDFLARED_TOKEN / POSTGRES_APP_PASSWORD are
-# fleet-wide (the same value for every box; only the hostname varies the tunnel
-# hash), so clone.sh reads them once rather than generating them per host.
+# The placeholders (each wrapped in double braces below) are substituted by
+# infra/clone.sh at create time, per host in instances.toml:
+#   HOSTNAME, ANTHROPIC_API_KEY_B64, DESKTOP_USER, DESKTOP_PASS, TUNNEL_SALT,
+#   CLOUDFLARED_TOKEN, POSTGRES_APP_PASSWORD, ELEVENLABS_VOICE_ID (per-box) and
+#   the fleet-wide student keys OPENAI_API_KEY, ELEVENLABS_API_KEY, EXA_API_KEY,
+#   FIRECRAWL_API_KEY, CODERABBIT_API_KEY, VSCODE_TUNNEL_GITHUB_TOKEN.
+# TUNNEL_SALT and the fleet student keys are fleet-wide (one value for every box);
+# CLOUDFLARED_TOKEN, POSTGRES_APP_PASSWORD, ANTHROPIC_API_KEY and ELEVENLABS_VOICE_ID
+# are per-box. clone.sh reads each from its source (env, instance-secrets.toml,
+# instances.toml) and substitutes them here.
 #
 # This is the ONLY per-instance layer. Everything else comes from the
 # golden snapshot, so each box differs only by name + its injected secrets.
@@ -21,16 +25,36 @@ hostname: {{HOSTNAME}}
 preserve_hostname: false
 
 write_files:
-  # Per-instance OpenClaw API key, root-readable only, owned by the agent user.
-  # base64-encoded (M3): clone.sh emits the key as a single b64 line, so a key
-  # with embedded newlines or leading YAML sigils (`{`, `|`, `>`) can never
-  # corrupt this block or inject adjacent keys. cloud-init decodes it back to the
-  # raw key on the box. clone.sh additionally rejects CR/LF in the key up front.
+  # Per-instance Anthropic API key, root-readable only, owned by the agent user.
+  # Read per-box from instance-secrets.toml (billing isolation). base64-encoded
+  # (M3): clone.sh emits the key as a single b64 line, so a key with embedded
+  # newlines or leading YAML sigils (`{`, `|`, `>`) can never corrupt this block
+  # or inject adjacent keys. cloud-init decodes it back to the raw key on the box.
+  # clone.sh additionally rejects CR/LF in the key up front. Consumed by the
+  # OpenClaw gateway for LLM API calls.
   - path: /home/ubuntu/.openclaw/credentials/api-key
     owner: ubuntu:ubuntu
     permissions: '0600'
     encoding: b64
-    content: "{{OPENCLAW_API_KEY_B64}}"
+    content: "{{ANTHROPIC_API_KEY_B64}}"
+
+  # Fleet-wide student tool keys, sourced by the ubuntu user's ~/.zshenv so every
+  # shell (and the tools they launch — claude, codex, skill scripts) sees them.
+  # root:root 0640 keeps the file out of the home dir while staying ubuntu-readable.
+  # These are the SAME value on every box (one shared account per tool). The
+  # per-box ELEVENLABS_VOICE_ID pairs the shared ElevenLabs key with this box's
+  # voice. VSCODE_TUNNEL_GITHUB_TOKEN is deliberately NOT here — it is operational
+  # infra (tunnel pre-auth), consumed once by firstboot, not student tooling.
+  - path: /etc/openclaw/student-keys.env
+    owner: root:root
+    permissions: '0640'
+    content: |
+      OPENAI_API_KEY="{{OPENAI_API_KEY}}"
+      ELEVENLABS_API_KEY="{{ELEVENLABS_API_KEY}}"
+      ELEVENLABS_VOICE_ID="{{ELEVENLABS_VOICE_ID}}"
+      EXA_API_KEY="{{EXA_API_KEY}}"
+      FIRECRAWL_API_KEY="{{FIRECRAWL_API_KEY}}"
+      CODERABBIT_API_KEY="{{CODERABBIT_API_KEY}}"
 
   # Per-instance desktop basic-auth credential consumed at first boot by the
   # baked openclaw-desktop-cred.service (After=cloud-final), which turns it into
@@ -114,6 +138,14 @@ runcmd:
   # Non-fatal (|| true) so a transient network hiccup never blocks cloud-init.
   # Logs to /var/log/goto2026-pull-at-boot.log for post-boot inspection.
   - /usr/local/sbin/goto2026-pull-at-boot.sh || true
+  # VS Code Remote Tunnel: pre-authenticate the `code` CLI with the shared class
+  # GitHub PAT, then enable+start the baked tunnel unit so the box is reachable at
+  # https://vscode.dev/tunnel/{{HOSTNAME}} before class. The token is injected here
+  # (never baked into the golden image). All three are non-fatal so a flaky network
+  # or GitHub hiccup never blocks cloud-init.
+  - sudo -u ubuntu code tunnel user login --provider github --access-token "{{VSCODE_TUNNEL_GITHUB_TOKEN}}" || true
+  - systemctl enable openclaw-code-tunnel.service || true
+  - systemctl start openclaw-code-tunnel.service || true
   # Sanity self-check on first boot. Keep `|| true` so a doctor failure never
   # blocks cloud-init, but capture its output for debugging instead of discarding
   # it (m3). The `|| true` runs the whole redirected command, so the log is always

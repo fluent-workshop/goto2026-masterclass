@@ -12,6 +12,9 @@
  *   CLOUDFLARED_TOKEN  — must be a CF connector token (base64url-encoded JSON blob
  *                        starting with eyJ, decoding to {"a":…,"t":…,"s":…})
  *   POSTGRES_APP_PASSWORD — must be non-empty, no shell-unsafe chars
+ *   ANTHROPIC_API_KEY  — when present in the section, must match sk-ant-…
+ *                        (absent is OK: the ALLOW_STUB render path supplies a
+ *                        placeholder for boxes not yet keyed)
  *
  * Also validates TUNNEL_SALT when passed as a third argument:
  *   bun run infra/scripts/validate-secrets.ts instance-secrets.toml pikachu <salt>
@@ -124,6 +127,32 @@ if (!pgPass) {
   errors++;
 } else {
   console.error(`[validate-secrets] OK    [${section}] POSTGRES_APP_PASSWORD (${pgPass.length} chars)`);
+}
+
+// ---------------------------------------------------------------------------
+// ANTHROPIC_API_KEY (per-box; only some boxes are keyed yet)
+// ---------------------------------------------------------------------------
+// Validate the shape ONLY when the key is present. A missing key is not an error
+// here: clone.sh's ALLOW_STUB path renders an obvious placeholder for boxes that
+// don't have a real key yet, and refuses to render (without ALLOW_STUB) on its own.
+
+const anthropicKey = secrets["ANTHROPIC_API_KEY"];
+
+if (anthropicKey !== undefined) {
+  if (!anthropicKey) {
+    console.error(`[validate-secrets] FAIL  [${section}] ANTHROPIC_API_KEY is empty`);
+    errors++;
+  } else if (!/^sk-ant-[a-zA-Z0-9_-]+$/.test(anthropicKey)) {
+    console.error(`[validate-secrets] FAIL  [${section}] ANTHROPIC_API_KEY has invalid shape (expected sk-ant-…)`);
+    errors++;
+  } else if (/["'`$\\]/.test(anthropicKey)) {
+    console.error(`[validate-secrets] FAIL  [${section}] ANTHROPIC_API_KEY contains shell-unsafe chars`);
+    errors++;
+  } else {
+    console.error(`[validate-secrets] OK    [${section}] ANTHROPIC_API_KEY (sk-ant-…, ${anthropicKey.length} chars)`);
+  }
+} else {
+  warn(`[${section}] ANTHROPIC_API_KEY absent — clone.sh will stub it (ALLOW_STUB) or refuse to render`);
 }
 
 // ---------------------------------------------------------------------------
