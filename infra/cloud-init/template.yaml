@@ -124,7 +124,7 @@ write_files:
       chown -R ubuntu:ubuntu "$REPO"
 
       echo "[pull-at-boot] running goto2026-sync"
-      "$REPO/dotfiles/bin/goto2026-sync"
+      bash "$REPO/dotfiles/bin/goto2026-sync"
 
       echo "[pull-at-boot] done"
 

@@ -118,7 +118,7 @@ GCP_IMAGE_FAMILY="${GCP_IMAGE_FAMILY:-goto2026-golden}"
 GCP_DISK_SIZE="${GCP_DISK_SIZE:-256GB}"
 GCP_DISK_TYPE="${GCP_DISK_TYPE:-pd-balanced}"
 GCP_INSTANCE_PREFIX="${GCP_INSTANCE_PREFIX:-goto-}"
-GCP_SSH_USER="${GCP_SSH_USER:-cedric}"
+GCP_SSH_USER="${GCP_SSH_USER:-ubuntu}"
 GCP_SSH_PUBKEY_PATH="${GCP_SSH_PUBKEY_PATH:-$HOME/.ssh/id_ed25519.pub}"
 
 # Validation patterns for values that flow into YAML and shell on the box.
