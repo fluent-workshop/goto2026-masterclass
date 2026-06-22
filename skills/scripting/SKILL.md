@@ -316,7 +316,7 @@ agent's working directory.
 bun run {baseDir}/scripts/my-tool.ts run --output output/data/
 
 # Bad — breaks when cwd ≠ workspace root, and is brittle if the skill moves
-bun run skills/my-tool/scripts/my-tool.ts run --output output/data/
+bun run skills/<skill-name>/scripts/my-tool.ts run --output output/data/
 ```
 
 `{baseDir}` resolves to the skill that owns the SKILL.md, so use it only for that
