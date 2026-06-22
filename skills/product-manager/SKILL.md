@@ -1,7 +1,7 @@
 ---
-name: Product Manager
-description: Build products users love with discovery, prioritization, roadmapping, and cross-functional leadership.
-metadata: {"clawdbot":{"emoji":"🎯","os":["linux","darwin","win32"]}}
+name: product-manager
+description: "Product discovery, prioritization, and roadmapping guidance. Use when scoping a product decision, writing a roadmap, or prioritizing a backlog."
+metadata: {"openclaw": {"emoji": "🎯"}}
 ---
 
 # Product Management Rules
