@@ -1,0 +1,23 @@
+[Unit]
+# VS Code Remote Tunnel for the GOTO 2026 student box. Students reach the editor
+# at https://vscode.dev/tunnel/<hostname> — GitHub OAuth secures the link, so no
+# inbound port is exposed. The tunnel name is the box hostname (%H), set by
+# cloud-init before this unit's first start.
+#
+# Generic at bake: the unit is installed by phase_vscode but left DISABLED, because
+# `code tunnel` needs the box pre-authenticated with the shared GitHub PAT first.
+# cloud-init runcmd runs `code tunnel user login` then enables+starts this unit
+# per box, so the golden image carries no token and no host-specific state.
+Description=VS Code Remote Tunnel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+ExecStart=/usr/bin/code tunnel --accept-server-license-terms --name %H
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
