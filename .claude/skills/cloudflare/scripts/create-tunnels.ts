@@ -10,7 +10,7 @@
  *
  * Flow per box:
  *   1. Navigate to Zero Trust → Create tunnel → Select Cloudflared
- *   2. Fill tunnel name (goto2026-{box}), click Save Tunnel
+ *   2. Fill tunnel name (gt26-{box}), click Save Tunnel
  *   3. Extract connector token from React fiber (no clipboard needed)
  *   4. Write CLOUDFLARED_TOKEN into instance-secrets.toml
  *
@@ -23,7 +23,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { launch, waitForLogin, ACCOUNT_ID } from './playwright-helpers.ts';
+import { launch, waitForLogin, ACCOUNT_ID, TUNNEL_PREFIX } from './playwright-helpers.ts';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dir, '../../../..');
@@ -123,7 +123,7 @@ const CREATE_AND_EXTRACT_JS = (box: string) => /* js */`
     // Step 2: Fill tunnel name
     const inp = await waitFor(() => document.querySelector('input[placeholder*="NYC"]'));
     const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-    nativeSetter.call(inp, 'goto2026-${box}');
+    nativeSetter.call(inp, '${TUNNEL_PREFIX}-${box}');
     inp.dispatchEvent(new Event('input',  { bubbles: true }));
     inp.dispatchEvent(new Event('change', { bubbles: true }));
     await sleep(500);

@@ -18,3 +18,6 @@ infra/cloud-init/generated/
 crash.log
 
 instance-secrets.toml
+
+# Editor / sed -i.bak backup files — never commit
+*.bak

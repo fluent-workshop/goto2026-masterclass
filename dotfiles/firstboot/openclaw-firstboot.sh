@@ -4,9 +4,10 @@
 # class are attributable to the box (e.g. "Pikachu") even before a student
 # enrolls.
 #
-# Runs at FIRST BOOT (openclaw-firstboot.service, After=cloud-final so the
-# cloud-init hostname is already applied), NOT during the bake — the golden
-# snapshot is generic and carries no per-box identity.
+# Runs at FIRST BOOT (openclaw-firstboot.service, ordered After=network-online.target
+# — cloud-init applies the hostname in an earlier stage, so it is already set by
+# the time this runs), NOT during the bake — the golden image is generic and
+# carries no per-box identity.
 #
 # This is a per-box DEFAULT, set on the student box (a single-purpose, ephemeral
 # VPS) — NOT on the build machine. The /enroll flow later OVERRIDES user.name +

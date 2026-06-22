@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
 # bootstrap.sh — Bake the golden OpenClaw image for the GOTO 2026 masterclass.
 #
-# Run ONCE on a fresh Hetzner VPS (Ubuntu 24.04, 4GB+ RAM), then snapshot it.
-# Idempotent: safe to re-run while iterating on the recipe.
+# Run ONCE on a fresh GCE VM (Ubuntu 22.04 LTS, 4GB+ RAM), then capture a custom
+# image from its stopped boot disk. Idempotent: safe to re-run while iterating.
 #
 # Run from a CHECKOUT of the repo (NOT piped over curl|bash — the shell/
-# profiles must be present on disk; see the preflight guard below):
+# profiles must be present on disk; see the preflight guard below). On GCE you
+# log in as a sudo-capable user (not root), so run the bake with `sudo`:
 #
-#   ssh root@<fresh-vps>
+#   gcloud compute ssh goto-test --zone us-central1-a
 #   git clone https://github.com/spantree/goto-2026-masterclass.git
 #   cd goto-2026-masterclass
-#   bash dotfiles/bootstrap.sh
-#   # then: hcloud server create-image <server> --type snapshot --description "goto2026-golden"
+#   sudo bash dotfiles/bootstrap.sh
+#   # then, after `gcloud compute instances stop goto-test`:
+#   #   gcloud compute images create goto2026-golden-<date> \
+#   #     --source-disk=goto-test --source-disk-zone=us-central1-a \
+#   #     --family=goto2026-golden
 #
 # The bake is organized into named phases (phase_base, phase_toolchain,
 # phase_desktop, phase_docker, phase_verify). A full run executes them in order;
@@ -21,7 +25,7 @@
 # `--force`. Example: `bash dotfiles/bootstrap.sh --phase phase_toolchain`.
 #
 # Per-instance differences (hostname, API keys) are NOT set here — cloud-init
-# handles those at clone time so the snapshot stays generic.
+# handles those at clone time so the golden image stays generic.
 
 set -euo pipefail
 
@@ -91,7 +95,7 @@ for _need in "$SCRIPT_DIR/shell" "$SCRIPT_DIR/firstboot" "$SCRIPT_DIR/desktop" "
 done
 
 # (b) Non-login resolution relies on /usr/local/bin being on dash's default
-#     PATH (where we symlink the shims). It is on Ubuntu 24.04, but it's a
+#     PATH (where we symlink the shims). It is on Ubuntu 22.04, but it's a
 #     compile-time default, not POSIX-guaranteed — assert it so a re-bake on a
 #     different base fails here instead of silently in class.
 # shellcheck disable=SC2016  # $PATH must stay literal: it expands in the env -i subshell, not here
@@ -242,7 +246,7 @@ phase_toolchain() {
 
   # Per-box first-boot setup: seeds the agent user's git identity from the
   # hostname (Pikachu / pikachu-goto2026@fluentworkshop.dev) on the real box's
-  # first boot — generic at bake, so the snapshot stays per-box-agnostic. Enabled
+  # first boot — generic at bake, so the image stays per-box-agnostic. Enabled
   # here; runs once at boot (After=cloud-final, once the hostname is applied).
   log "Installing per-box first-boot setup helper + unit"
   install -m 0755 "$SCRIPT_DIR/firstboot/openclaw-firstboot.sh" \
@@ -270,7 +274,7 @@ phase_desktop() {
   # TLS at Cloudflare's edge; here we only make the local chain correct. The
   # per-student htpasswd is NOT baked — it's written at first boot by
   # openclaw-desktop-cred.service from a cloud-init-dropped credential, so the
-  # snapshot carries no secret and nginx fails closed until creds land.
+  # image carries no secret and nginx fails closed until creds land.
   log "Installing desktop stack (Xfce + TigerVNC + noVNC + nginx)"
   apt-get install -y -qq \
     xfce4 xfce4-terminal dbus-x11 \
@@ -345,7 +349,7 @@ phase_desktop() {
 # Bake time (this phase) lays down ONLY the connector binary, a config-generator
 # helper, and the systemd unit — all generic. The per-box config.yml is rendered
 # at FIRST BOOT by the helper from /etc/openclaw/tunnel.env (cloud-init-injected
-# TUNNEL_SALT + CLOUDFLARED_TOKEN), so the snapshot carries no secret and no
+# TUNNEL_SALT + CLOUDFLARED_TOKEN), so the image carries no secret and no
 # host-specific config. Token-based connector model: no cert.pem on the box.
 phase_tunnel() {
   if [[ "$FORCE" -ne 1 && -f "$BAKE_STAMP_DIR/${FUNCNAME[0]}.done" && "${FUNCNAME[0]}" != "$SELECTED_PHASE" ]]; then
@@ -524,7 +528,7 @@ phase_verify() {
 
   # The per-box tunnel config is FIRST-BOOT generated from the cloud-init
   # salt/token — the bake must NOT have rendered it (no host-specific data, no
-  # secret, in the snapshot). Its presence here means a leak or a misordered bake.
+  # secret, in the image). Its presence here means a leak or a misordered bake.
   log "Asserting /etc/cloudflared/config.yml is absent at bake (first-boot generated)"
   if [[ -e /etc/cloudflared/config.yml ]]; then
     echo "FATAL: /etc/cloudflared/config.yml exists at bake; it must be first-boot generated." >&2
@@ -550,7 +554,11 @@ SELECTED_PHASE="${SELECTED_PHASE:-}"
 FORCE=0
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --phase) SELECTED_PHASE=$2; shift 2;;
+    --phase)
+      # Guard $2 before assigning so `--phase` with no value fails clearly
+      # instead of tripping `set -u` with an opaque "unbound variable".
+      [[ $# -ge 2 ]] || { echo "--phase requires a phase name (e.g. --phase phase_toolchain)" >&2; exit 1; }
+      SELECTED_PHASE=$2; shift 2;;
     --force) FORCE=1; shift;;
     *) echo "Unknown arg: $1" >&2; exit 1;;
   esac
@@ -572,6 +580,6 @@ else
   for _p in "${ALL_PHASES[@]}"; do
     "$_p"
   done
-  log "Bake complete. Snapshot this server now."
-  log "  hcloud server create-image <name> --type snapshot --description goto2026-golden"
+  log "Bake complete. Capture the golden image now (after stopping the VM):"
+  log "  gcloud compute images create goto2026-golden-<date> --source-disk=<vm> --source-disk-zone=<zone> --family=goto2026-golden"
 fi

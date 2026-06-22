@@ -18,13 +18,12 @@ import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { createHash } from 'crypto';
-import { cfFetch, ACCOUNT_ID, ZONE_ID, DOMAIN } from './playwright-helpers.ts';
+import { cfFetch, ACCOUNT_ID, ZONE_ID, DOMAIN, TUNNEL_PREFIX } from './playwright-helpers.ts';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dir, '../../../..');
 const INSTANCES_TXT = resolve(REPO_ROOT, 'instances.txt');
 const TOML_PATH = resolve(REPO_ROOT, 'instance-secrets.toml');
-const TUNNEL_PREFIX = 'gt26';
 
 const CF_TOKEN_PATH = (() => {
   const tunnel = resolve(process.env.HOME!, '.openclaw/credentials/cloudflare-tunnel-api-key');
@@ -83,7 +82,7 @@ function sidecarIds(): Record<string, string> {
 
 async function getTunnelId(name: string): Promise<string | null> {
   // Try sidecar first (no API scope needed)
-  const box = name.replace(/^gt26-/, '');
+  const box = name.replace(new RegExp(`^${TUNNEL_PREFIX}-`), '');
   const fromSidecar = sidecarIds()[box];
   if (fromSidecar) return fromSidecar;
 

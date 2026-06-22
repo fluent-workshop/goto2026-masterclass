@@ -34,7 +34,9 @@ if [[ -z "${DESKTOP_USER:-}" || -z "${DESKTOP_PASS:-}" ]]; then
 fi
 
 # -B (bcrypt) so the on-disk hash isn't a weak crypt(); -c creates the file.
-htpasswd -bBc "$HTPASSWD" "$DESKTOP_USER" "$DESKTOP_PASS"
+# -i reads the password from stdin so the cleartext never lands in the process
+# table (visible to `ps`), unlike -b which passes it as a command-line argument.
+printf '%s' "$DESKTOP_PASS" | htpasswd -iBc "$HTPASSWD" "$DESKTOP_USER"
 chgrp www-data "$HTPASSWD" 2>/dev/null || true
 chmod 0640 "$HTPASSWD"
 echo "openclaw-desktop-cred: wrote $HTPASSWD for user '$DESKTOP_USER'."

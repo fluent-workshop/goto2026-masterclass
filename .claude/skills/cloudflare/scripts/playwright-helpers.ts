@@ -10,6 +10,13 @@ import { createInterface } from 'readline';
 export const ACCOUNT_ID = '7605cf7daffb181f2e6f047fc7183b22';
 export const ZONE_ID    = '9e8e8118df63e27a2163cd4424bdebe1';
 export const DOMAIN     = 'fluentworkshop.dev';
+
+// Shared tunnel naming prefix. Used as BOTH the Cloudflare tunnel name prefix
+// (`gt26-<box>`) and the per-service hostname infix (`<box>-gt26-<service>`).
+// MUST stay in sync with dotfiles/tunnel/openclaw-tunnel-config.sh, which renders
+// the same `-gt26-` infix on the box. Changing it here means re-creating tunnels,
+// re-issuing DNS, and re-baking the golden image.
+export const TUNNEL_PREFIX = 'gt26';
 export const TUNNELS_URL = `https://one.dash.cloudflare.com/${ACCOUNT_ID}/networks/tunnels`;
 
 /** Launch a headed Chromium with sensible defaults for CF dashboard use. */

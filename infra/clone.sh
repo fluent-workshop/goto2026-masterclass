@@ -21,9 +21,12 @@
 # credential-bag loop). Default source emits a clearly-fake placeholder so no
 # real key is ever required to render; override OPENCLAW_API_KEY_SOURCE=env|op.
 #
-# Cloudflare Tunnel secrets (TUNNEL_SALT, CLOUDFLARED_TOKEN) are FLEET-WIDE (same
-# value for every box). POSTGRES_APP_PASSWORD is PER-INSTANCE: read from
-# instance-secrets.toml (a gitignored file at repo root) keyed by hostname.
+# TUNNEL_SALT is FLEET-WIDE (the same value on every box; it only salts the
+# per-box hostname hash). CLOUDFLARED_TOKEN and POSTGRES_APP_PASSWORD are
+# PER-INSTANCE: each box has its OWN Cloudflare Tunnel token and its own Postgres
+# password, both read from instance-secrets.toml (a gitignored file at repo root)
+# keyed by hostname. Both are validated against a strict charset before they are
+# written into a cloud-init .env that is later sourced by root on the box.
 #
 # Idempotent: re-running reuses any desktop password already recorded in the
 # manifest for a host (so already-distributed creds stay valid) and only
@@ -50,12 +53,12 @@
 #                           BOTH the API key and the tunnel-secrets stub
 #   OPENCLAW_API_KEY        used when OPENCLAW_API_KEY_SOURCE=env
 #   OP_API_KEY_ITEM         used when OPENCLAW_API_KEY_SOURCE=op (op:// ref)
-#   TUNNEL_SECRETS_SOURCE   stub (default) | env | op  (fleet-wide tunnel secrets)
+#   TUNNEL_SECRETS_SOURCE   stub (default) | env | op  (governs ONLY the
+#                           fleet-wide TUNNEL_SALT below)
 #   TUNNEL_SALT             used when TUNNEL_SECRETS_SOURCE=env (alphanumeric)
-#   CLOUDFLARED_TOKEN       used when TUNNEL_SECRETS_SOURCE=env
 #   OP_TUNNEL_SALT_ITEM     used when TUNNEL_SECRETS_SOURCE=op (op:// ref)
-#   OP_CLOUDFLARED_TOKEN_ITEM   used when TUNNEL_SECRETS_SOURCE=op (op:// ref)
-#   (POSTGRES_APP_PASSWORD is per-instance from instance-secrets.toml)
+#   (CLOUDFLARED_TOKEN and POSTGRES_APP_PASSWORD are PER-INSTANCE, read from
+#    instance-secrets.toml — NOT from TUNNEL_SECRETS_SOURCE)
 #
 #   PROVISION               1 to create GCP instances after rendering (else 0)
 #   GCP_PROJECT             GCP project (default: goto2026-masterclass-500200)
@@ -107,6 +110,14 @@ GCP_SSH_PUBKEY_PATH="${GCP_SSH_PUBKEY_PATH:-$HOME/.ssh/id_ed25519.pub}"
 HOSTNAME_RE='^[a-z][a-z0-9-]{1,62}$'
 DESKTOP_USER_RE='^[a-z_][a-z0-9_-]{0,31}$'
 TUNNEL_SALT_RE='^[A-Za-z0-9]{8,128}$'
+# Per-instance secrets flow into /etc/openclaw/tunnel.env, which is sourced by
+# ROOT on the box at first boot. Validate them against a strict charset BEFORE
+# substitution so a stray backtick, $(...), quote, or space in
+# instance-secrets.toml can never become code executed as root.
+#   - Cloudflare connector token: base64url-encoded JSON blob, always "eyJ…".
+#   - Postgres app password: the generated 3-word passphrase (alnum + . _ -).
+CLOUDFLARED_TOKEN_RE='^eyJ[A-Za-z0-9._=/+-]+$'
+POSTGRES_APP_PASSWORD_RE='^[A-Za-z0-9._-]+$'
 
 # --- helpers -----------------------------------------------------------------
 die()  { echo "clone.sh: $*" >&2; exit 1; }
@@ -253,15 +264,27 @@ provision_gcp() {
     warn "GCP_SSH_PUBKEY_PATH ($GCP_SSH_PUBKEY_PATH) not readable — instances will have no admin ssh-key (use 'gcloud compute ssh')."
   fi
 
-  local host out name
+  local host out name meta created=0 skipped=0 failed=0
   for host in "${hosts[@]}"; do
     out="$OUT_DIR/$host.cloud-init.yaml"
     [[ -f "$out" ]] || die "no rendered cloud-init for '$host' at $out"
     name="${GCP_INSTANCE_PREFIX}${host}"
+
+    # Idempotent: if the instance already exists, skip it and keep going. Lets an
+    # interrupted fleet rollout be re-run without aborting on the first box.
+    if gcloud compute instances describe "$name" \
+         --project "$GCP_PROJECT" --zone "$GCP_ZONE" >/dev/null 2>&1; then
+      echo "clone.sh: $name already exists — skipping"
+      skipped=$((skipped + 1))
+      continue
+    fi
+
     echo "clone.sh: creating GCP instance $name ($GCP_MACHINE_TYPE, $GCP_ZONE) from family $GCP_IMAGE_FAMILY"
-    local meta="enable-oslogin=FALSE"
+    meta="enable-oslogin=FALSE"
     [[ -n "$ssh_meta" ]] && meta="${meta},ssh-keys=${ssh_meta}"
-    gcloud compute instances create "$name" \
+
+    # Don't let one failed create abort the rest of the fleet — log and continue.
+    if gcloud compute instances create "$name" \
       --project "$GCP_PROJECT" \
       --zone "$GCP_ZONE" \
       --machine-type "$GCP_MACHINE_TYPE" \
@@ -271,10 +294,15 @@ provision_gcp() {
       --boot-disk-type "$GCP_DISK_TYPE" \
       --metadata-from-file "user-data=$out" \
       --metadata "$meta" \
-      --labels "project=goto-2026,hostname=$host" \
-      || die "gcloud create failed for $name"
+      --labels "project=goto-2026,hostname=$host"; then
+      created=$((created + 1))
+    else
+      warn "gcloud create failed for $name — continuing with the remaining boxes"
+      failed=$((failed + 1))
+    fi
   done
-  echo "clone.sh: provisioned ${#hosts[@]} GCP instance(s) from $GCP_IMAGE_FAMILY in $GCP_PROJECT"
+  echo "clone.sh: provision summary — created=$created skipped=$skipped failed=$failed (family $GCP_IMAGE_FAMILY, project $GCP_PROJECT)"
+  [[ "$failed" -eq 0 ]] || die "$failed instance create(s) failed (see log above)"
 }
 
 # --- arg parse ---------------------------------------------------------------
@@ -363,8 +391,14 @@ for host in "${hosts[@]}"; do
   rendered="${rendered//\{\{DESKTOP_PASS\}\}/$pass}"
   postgres_app_password="$(fetch_instance_password "$host")"
   cloudflared_token="$(fetch_instance_cloudflared_token "$host")"
-  [[ "$cloudflared_token" == *$'\n'* || "$cloudflared_token" == *$'\r'* ]] \
-    && die "CLOUDFLARED_TOKEN for '$host' contains CR/LF"
+  # Strict validation BEFORE substitution: both land in tunnel.env, sourced by
+  # root on the box, so reject anything outside their known charset (this also
+  # subsumes the CR/LF check). A backtick/$()/quote here would otherwise run as
+  # root at first boot.
+  [[ "$cloudflared_token" =~ $CLOUDFLARED_TOKEN_RE ]] \
+    || die "CLOUDFLARED_TOKEN for '$host' is malformed (must match $CLOUDFLARED_TOKEN_RE)"
+  [[ "$postgres_app_password" =~ $POSTGRES_APP_PASSWORD_RE ]] \
+    || die "POSTGRES_APP_PASSWORD for '$host' is malformed (must match $POSTGRES_APP_PASSWORD_RE)"
   # TUNNEL_SALT is fleet-wide; CLOUDFLARED_TOKEN is now per-instance.
   rendered="${rendered//\{\{TUNNEL_SALT\}\}/$tunnel_salt}"
   rendered="${rendered//\{\{CLOUDFLARED_TOKEN\}\}/$cloudflared_token}"
