@@ -457,6 +457,12 @@ for host in "${hosts[@]}"; do
   elevenlabs_voice_id="$(bun run --silent "$SCRIPT_DIR/scripts/toml-get.ts" \
     "$INSTANCES_ROSTER" "$host" elevenlabs_voice_id)"
 
+  # VS Code tunnel name: sha256(hostname + TUNNEL_SALT + "vscode")[:24].
+  # Not the hostname, not in DNS — unguessable without both secrets.
+  # Students reach VS Code at https://vscode.dev/tunnel/$vscode_tunnel_name
+  vscode_tunnel_name="$(printf '%s%s%s' "$host" "$tunnel_salt" 'vscode' \
+    | sha256sum | cut -c1-24)"
+
   # Validate secrets before they touch the template (exit 1 on any failure).
   # Now also validates ANTHROPIC_API_KEY shape when present in the section.
   bun run --silent "$SCRIPT_DIR/scripts/validate-secrets.ts" \
@@ -480,11 +486,12 @@ for host in "${hosts[@]}"; do
     --arg fa  "$firecrawl_api_key" \
     --arg ca  "$coderabbit_api_key" \
     --arg vt  "$vscode_tunnel_github_token" \
+    --arg vn  "$vscode_tunnel_name" \
     '{HOSTNAME:$hn,ANTHROPIC_API_KEY_B64:$ak,DESKTOP_USER:$du,DESKTOP_PASS:$dp,
       TUNNEL_SALT:$ts,CLOUDFLARED_TOKEN:$ct,POSTGRES_APP_PASSWORD:$pp,
       ELEVENLABS_VOICE_ID:$vi,OPENAI_API_KEY:$oa,ELEVENLABS_API_KEY:$ea,
       EXA_API_KEY:$xa,FIRECRAWL_API_KEY:$fa,CODERABBIT_API_KEY:$ca,
-      VSCODE_TUNNEL_GITHUB_TOKEN:$vt}')"
+      VSCODE_TUNNEL_GITHUB_TOKEN:$vt,VSCODE_TUNNEL_NAME:$vn}')"
   bun run --silent "$SCRIPT_DIR/scripts/render-template.ts" \
     "$TEMPLATE" --data "$data" > "$out" \
     || die "template rendering failed for '$host'"

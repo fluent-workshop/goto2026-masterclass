@@ -84,6 +84,17 @@ write_files:
       CLOUDFLARED_TOKEN="{{CLOUDFLARED_TOKEN}}"
       POSTGRES_APP_PASSWORD="{{POSTGRES_APP_PASSWORD}}"
 
+  # VS Code Remote Tunnel name — a 24-char hex string derived from
+  # sha256(hostname + TUNNEL_SALT + "vscode")[:24]. Not the hostname, not in DNS,
+  # unguessable without both secrets. Consumed by openclaw-code-tunnel.service
+  # via EnvironmentFile. Students reach VS Code at
+  # https://vscode.dev/tunnel/$VSCODE_TUNNEL_NAME.
+  - path: /etc/openclaw/vscode-tunnel-name
+    owner: root:root
+    permissions: '0640'
+    content: |
+      VSCODE_TUNNEL_NAME="{{VSCODE_TUNNEL_NAME}}"
+
   # Pull-at-boot helper: clones the masterclass repo (or fast-forwards if it
   # already exists) then runs goto2026-sync to apply current dotfiles, shell
   # niceties, mise toolchain config, and OpenClaw skills.
@@ -143,7 +154,10 @@ runcmd:
   # https://vscode.dev/tunnel/{{HOSTNAME}} before class. The token is injected here
   # (never baked into the golden image). All three are non-fatal so a flaky network
   # or GitHub hiccup never blocks cloud-init.
+  # VS Code tunnel: pre-auth with the shared class GitHub PAT, then enable the
+  # baked service (which reads VSCODE_TUNNEL_NAME from vscode-tunnel-name above).
   - sudo -u ubuntu code tunnel user login --provider github --access-token "{{VSCODE_TUNNEL_GITHUB_TOKEN}}" || true
+  - systemctl daemon-reload || true
   - systemctl enable openclaw-code-tunnel.service || true
   - systemctl start openclaw-code-tunnel.service || true
   # Sanity self-check on first boot. Keep `|| true` so a doctor failure never
