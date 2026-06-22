@@ -2,13 +2,18 @@ terraform {
   required_version = ">= 1.5"
 
   required_providers {
-    hcloud = {
-      source  = "hetznercloud/hcloud"
-      version = "~> 1.49"
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 6.0"
     }
   }
 }
 
-# The Hetzner Cloud API token is read from the HCLOUD_TOKEN environment
-# variable at runtime. It is NEVER hardcoded here and NEVER committed.
-provider "hcloud" {}
+# Project / region / zone come from variables. Credentials are taken from the
+# ambient gcloud Application Default Credentials (gcloud auth) — never hardcoded
+# and never committed.
+provider "google" {
+  project = var.project_id
+  region  = var.region
+  zone    = var.zone
+}
