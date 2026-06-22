@@ -92,7 +92,66 @@ apply_as_agent install -d -m 0755 "$AGENT_HOME/.local/bin"
 apply_as_agent install -m 0755 "$DOTFILES/bin/goto2026-sync" "$AGENT_HOME/.local/bin/goto2026-sync"
 
 # ---------------------------------------------------------------------------
-# 3. (Optional) Re-apply system configs — requires root
+# 3. Sync OpenClaw skills
+# ---------------------------------------------------------------------------
+# Skills in the repo override (or add to) the student's ~/.openclaw/workspace/skills/.
+# This is the primary mechanism for pushing skill updates to all boxes without
+# a re-bake: push to the repo → students/instructor run goto2026-sync.
+#
+# Strategy: rsync skills/ from the repo into the workspace, preserving any
+# student-created skills (we don't delete, only add/update).
+
+OCLAW_SKILLS_DIR="$AGENT_HOME/.openclaw/workspace/skills"
+REPO_SKILLS_DIR="$REPO_DIR/skills"
+
+if [[ -d "$REPO_SKILLS_DIR" ]]; then
+  log "Syncing OpenClaw skills → $OCLAW_SKILLS_DIR…"
+  apply_as_agent install -d -m 0755 "$OCLAW_SKILLS_DIR"
+  # rsync: update repo skills into workspace; --ignore-existing keeps student edits
+  # Use --update so newer student edits of a shared skill are preserved.
+  # Use --delete-after only for skills that are *removed* from the repo (opt-in via flag).
+  apply_as_agent rsync -a --update \
+    "$REPO_SKILLS_DIR/" "$OCLAW_SKILLS_DIR/"
+  SKILL_COUNT=$(ls -1 "$REPO_SKILLS_DIR" | wc -l | tr -d ' ')
+  log "  → $SKILL_COUNT skill(s) synced from repo"
+else
+  log "  (no skills/ directory in repo — skipping)"
+fi
+
+# ---------------------------------------------------------------------------
+# 3b. Overlay OpenClaw config (if present in repo)
+# ---------------------------------------------------------------------------
+# The repo can ship a `openclaw/` directory with gateway config overlays.
+# These are MERGED (not replaced) so per-box credentials injected at boot
+# (API key, Discord token) are never overwritten.
+#
+# Currently a placeholder — populate dotfiles/openclaw/ when you're ready
+# to push gateway config changes fleet-wide (e.g. adding a new account,
+# enabling a channel, tuning agent settings).
+
+OPENCLAW_OVERLAY="$REPO_DIR/dotfiles/openclaw"
+OCLAW_WORKSPACE="$AGENT_HOME/.openclaw/workspace"
+
+if [[ -d "$OPENCLAW_OVERLAY" ]]; then
+  log "Applying OpenClaw config overlay from dotfiles/openclaw/…"
+  # Copy overlay files (non-destructive: won't overwrite credentials or gateway.yaml)
+  for f in "$OPENCLAW_OVERLAY"/*; do
+    fname="$(basename "$f")"
+    # Never overwrite secrets/credentials
+    case "$fname" in
+      gateway.yaml|credentials|*.key|*.pem|api-key)
+        log "  skipping sensitive file: $fname"
+        continue ;;
+    esac
+    apply_as_agent install -m 0644 "$f" "$OCLAW_WORKSPACE/$fname"
+    log "  → $fname"
+  done
+else
+  log "  (no dotfiles/openclaw/ overlay — skipping)"
+fi
+
+# ---------------------------------------------------------------------------
+# 4. (Optional) Re-apply system configs — requires root
 # ---------------------------------------------------------------------------
 
 if [[ "$APPLY_SYSTEM" -eq 1 ]]; then
