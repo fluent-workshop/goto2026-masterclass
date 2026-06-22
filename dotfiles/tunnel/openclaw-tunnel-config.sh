@@ -7,7 +7,7 @@
 # until that file exists this exits non-zero and the connector unit stays down.
 #
 # Access model: each service gets a hostname ONE level under the apex
-# fluentworkshop.dev, with a `-goto2026-` infix. There is NO fleet-wide wildcard
+# fluentworkshop.dev, with a `-gt26-` infix. There is NO fleet-wide wildcard
 # CNAME — a wildcard would point every box at one tunnel, which is wrong for
 # per-box tunnels. Instead each box gets explicit FLAT per-service CNAMEs to ITS
 # OWN tunnel, created at clone time with `cloudflared tunnel route dns <tunnel>
@@ -72,24 +72,24 @@ trap 'rm -f "$tmp"' EXIT
   echo "no-autoupdate: true"
   echo "ingress:"
   # --- Public (no hash): the Vite dev server students share live. ----------
-  echo "  - hostname: ${host}-goto2026-app.${DOMAIN_BASE}"
+  echo "  - hostname: ${host}-gt26-app.${DOMAIN_BASE}"
   echo "    service: http://localhost:3000"
   # --- Protected (hash-obscured) browser services. -------------------------
-  echo "  - hostname: ${host}-goto2026-desktop-${h}.${DOMAIN_BASE}"
+  echo "  - hostname: ${host}-gt26-desktop-${h}.${DOMAIN_BASE}"
   echo "    service: http://localhost:8080"
   # NOTE: code-server (browser VS Code, would be localhost:8088) is DEFERRED — it
   # is the one service genuinely dangerous to expose, so the editor path is the
   # VS Code Remote Tunnel (devtunnel) instead, which needs no inbound ingress.
-  echo "  - hostname: ${host}-goto2026-supabase-studio-${h}.${DOMAIN_BASE}"
+  echo "  - hostname: ${host}-gt26-supabase-studio-${h}.${DOMAIN_BASE}"
   echo "    service: http://localhost:54323"
   # OpenClaw gateway: binds loopback:18789 (verified against the live config
   # gateway.port + the CLI default).
-  echo "  - hostname: ${host}-goto2026-gateway-${h}.${DOMAIN_BASE}"
+  echo "  - hostname: ${host}-gt26-gateway-${h}.${DOMAIN_BASE}"
   echo "    service: http://localhost:18789"
   # --- Protected non-HTTP services (require the cloudflared client). -------
-  echo "  - hostname: ${host}-goto2026-ssh-${h}.${DOMAIN_BASE}"
+  echo "  - hostname: ${host}-gt26-ssh-${h}.${DOMAIN_BASE}"
   echo "    service: ssh://localhost:22"
-  echo "  - hostname: ${host}-goto2026-postgres-${h}.${DOMAIN_BASE}"
+  echo "  - hostname: ${host}-gt26-postgres-${h}.${DOMAIN_BASE}"
   echo "    service: tcp://localhost:54322"
   # --- Mandatory catch-all: anything unmatched gets a 404, never a default. -
   echo "  - service: http_status:404"
