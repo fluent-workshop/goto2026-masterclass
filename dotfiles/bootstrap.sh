@@ -88,7 +88,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # (desktop/), the Cloudflare Tunnel helper + unit (tunnel/), and the Docker
 # service stack (infra/services/). A curl|bash or partial checkout leaves these
 # absent → a silently broken box. Require them all up front.
-for _need in "$SCRIPT_DIR/shell" "$SCRIPT_DIR/firstboot" "$SCRIPT_DIR/desktop" "$SCRIPT_DIR/tunnel" "$REPO_ROOT/infra/services"; do
+for _need in "$SCRIPT_DIR/shell" "$SCRIPT_DIR/firstboot" "$SCRIPT_DIR/desktop" "$SCRIPT_DIR/tunnel" "$SCRIPT_DIR/vscode" "$REPO_ROOT/infra/services"; do
   if [[ ! -d "$_need" ]]; then
     echo "FATAL: '$_need' not found." >&2
     echo "Run from a repo checkout (git clone … && bash dotfiles/bootstrap.sh)," >&2
@@ -286,6 +286,120 @@ phase_toolchain() {
     /etc/systemd/system/openclaw-firstboot.service
   systemctl daemon-reload
   systemctl enable openclaw-firstboot.service
+
+  touch "$BAKE_STAMP_DIR/${FUNCNAME[0]}.done"
+}
+
+# ---- phase_student_tools: the expanded classroom toolchain (loop-022 F5) ----
+# Runs AFTER phase_toolchain so node/uv (from mise.toml) are already on PATH for
+# the npm globals and the semgrep install. Three layers:
+#   1. apt packages (incl. gh + gcloud from their own signed repos)
+#   2. git-lfs + git-delta post-install wiring
+#   3. per-user tools via the mise toolchain (npm globals, uv-installed semgrep)
+# Idempotent: apt installs are no-ops when satisfied, repo/keyring writes are the
+# same bytes each run, and the version-guarded delta install skips when current.
+phase_student_tools() {
+  if [[ "$FORCE" -ne 1 && -f "$BAKE_STAMP_DIR/${FUNCNAME[0]}.done" && "${FUNCNAME[0]}" != "$SELECTED_PHASE" ]]; then
+    log "${FUNCNAME[0]} already done (stamp present) — skipping"
+    return 0
+  fi
+
+  export DEBIAN_FRONTEND=noninteractive
+
+  # ---- apt repos for gh + gcloud (signed-by keyrings, like Docker's) ---------
+  log "Configuring GitHub CLI + Google Cloud SDK apt repos"
+  install -m 0755 -d /usr/share/keyrings /etc/apt/trusted.gpg.d
+  # GitHub CLI
+  curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg 2>/dev/null
+  chmod a+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    > /etc/apt/sources.list.d/github-cli.list
+  # Google Cloud SDK
+  curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+    | gpg --dearmor --yes -o /etc/apt/trusted.gpg.d/cloud.google.gpg
+  echo "deb [signed-by=/etc/apt/trusted.gpg.d/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
+    > /etc/apt/sources.list.d/google-cloud-sdk.list
+
+  # ---- apt packages ----------------------------------------------------------
+  # ripgrep + jq are already in phase_base; everything else is new for the labs.
+  # bat installs as `batcat`, fd-find as `fdfind` (zshrc aliases them back).
+  log "Installing student apt packages (tree htop git-lfs ffmpeg exiftool … gh gcloud)"
+  apt-get update -qq
+  apt-get install -y -qq \
+    tree htop git-lfs ffmpeg libimage-exiftool-perl \
+    ack fzf bat fd-find lsof chromium-browser \
+    gh google-cloud-cli
+
+  # git-lfs needs a one-time system hook to register its smudge/clean filters.
+  log "Registering git-lfs (system-wide)"
+  git lfs install --system
+
+  # ---- git-delta (not in Ubuntu 22.04 apt — pinned .deb from GitHub) ---------
+  DELTA_VERSION="0.18.2"
+  _delta_installed=""
+  if command -v delta >/dev/null 2>&1; then
+    _delta_installed="$(delta --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)" || true
+  fi
+  if [[ "$_delta_installed" != "$DELTA_VERSION" ]]; then
+    log "Installing git-delta ${DELTA_VERSION} (pinned .deb)"
+    _delta_deb="$(mktemp --suffix=.deb)"
+    curl -fsSL -o "$_delta_deb" \
+      "https://github.com/dandavison/delta/releases/download/${DELTA_VERSION}/git-delta_${DELTA_VERSION}_amd64.deb"
+    apt-get install -y -qq "$_delta_deb"
+    rm -f "$_delta_deb"
+  else
+    log "git-delta ${DELTA_VERSION} already present — skipping"
+  fi
+
+  # ---- per-user tools via the mise toolchain ---------------------------------
+  # node (npm) and uv come from mise.toml, installed in phase_toolchain. Reshim so
+  # the python/uv/pnpm/… shims exist before we lean on them here.
+  log "Reshimming mise toolchain (python/uv/pnpm/go/rust shims)"
+  as_agent "$MISE_BIN" reshim
+
+  log "Installing npm globals (claude-code, codex, supabase) as $AGENT_USER"
+  as_agent npm install -g @anthropic-ai/claude-code @openai/codex supabase
+  as_agent "$MISE_BIN" reshim
+
+  log "Installing semgrep via uv (as $AGENT_USER)"
+  as_agent uv tool install semgrep
+
+  touch "$BAKE_STAMP_DIR/${FUNCNAME[0]}.done"
+}
+
+# ---- phase_vscode: VS Code CLI + Remote Tunnel unit (loop-022 F4) -----------
+# Installs the `code` CLI (NOT desktop VS Code) from Microsoft's apt repo and lays
+# down the tunnel unit. The unit is installed but DELIBERATELY NOT enabled here:
+# `code tunnel` needs per-box GitHub pre-auth (the shared PAT injected by cloud-init),
+# so cloud-init runcmd runs `code tunnel user login` then enables+starts it per box.
+# The golden image thus carries no token and no tunnel state. code-server is OUT of
+# scope — the Remote Tunnel replaces it (no inbound ingress needed).
+phase_vscode() {
+  if [[ "$FORCE" -ne 1 && -f "$BAKE_STAMP_DIR/${FUNCNAME[0]}.done" && "${FUNCNAME[0]}" != "$SELECTED_PHASE" ]]; then
+    log "${FUNCNAME[0]} already done (stamp present) — skipping"
+    return 0
+  fi
+
+  export DEBIAN_FRONTEND=noninteractive
+
+  log "Configuring Microsoft VS Code apt repo"
+  install -m 0755 -d /etc/apt/trusted.gpg.d
+  wget -qO- https://packages.microsoft.com/keys/microsoft.asc \
+    | gpg --dearmor --yes -o /etc/apt/trusted.gpg.d/microsoft.gpg
+  echo "deb [arch=amd64 signed-by=/etc/apt/trusted.gpg.d/microsoft.gpg] https://packages.microsoft.com/repos/code stable main" \
+    > /etc/apt/sources.list.d/vscode.list
+
+  log "Installing VS Code CLI (code)"
+  apt-get update -qq
+  apt-get install -y -qq code
+
+  # Install the tunnel unit but leave it disabled (enabled per-box by cloud-init
+  # after `code tunnel user login`). daemon-reload so systemd sees the new unit.
+  log "Installing VS Code Remote Tunnel unit (disabled at bake)"
+  install -m 0644 "$SCRIPT_DIR/vscode/openclaw-code-tunnel.service" \
+    /etc/systemd/system/openclaw-code-tunnel.service
+  systemctl daemon-reload
 
   touch "$BAKE_STAMP_DIR/${FUNCNAME[0]}.done"
 }
@@ -579,7 +693,7 @@ phase_verify() {
 # A full bake runs every phase in order (skipping any already stamped done). A
 # `--phase <name>` run executes only that phase and forces it (bypasses its
 # stamp). `--force` re-runs every phase, ignoring all stamps.
-ALL_PHASES=(phase_base phase_toolchain phase_desktop phase_tunnel phase_docker phase_verify)
+ALL_PHASES=(phase_base phase_toolchain phase_student_tools phase_vscode phase_desktop phase_tunnel phase_docker phase_verify)
 
 SELECTED_PHASE="${SELECTED_PHASE:-}"
 FORCE=0
