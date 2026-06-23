@@ -444,9 +444,15 @@ phase_desktop() {
     arc-theme papirus-icon-theme
 
   log "Installing desktop session + service units"
-  install -d -o "$AGENT_USER" -g "$AGENT_USER" -m 0755 "$AGENT_HOME/.vnc"
+  # Install xstartup to /etc/skel/.vnc/ so it is inherited when the ubuntu user home
+  # is created at cloud-init time (first boot). The per-user ~/.vnc/xstartup written
+  # directly at bake time is useless because the ubuntu home doesn't exist yet.
+  install -d -m 0755 /etc/skel/.vnc
+  install -m 0755 "$SCRIPT_DIR/desktop/xstartup" /etc/skel/.vnc/xstartup
+  # Also write to the agent home in case it already exists (rebake on existing box).
+  install -d -o "$AGENT_USER" -g "$AGENT_USER" -m 0755 "$AGENT_HOME/.vnc" 2>/dev/null || true
   install -m 0755 -o "$AGENT_USER" -g "$AGENT_USER" \
-    "$SCRIPT_DIR/desktop/xstartup" "$AGENT_HOME/.vnc/xstartup"
+    "$SCRIPT_DIR/desktop/xstartup" "$AGENT_HOME/.vnc/xstartup" 2>/dev/null || true
   install -m 0755 "$SCRIPT_DIR/desktop/openclaw-desktop-cred.sh" \
     /usr/local/sbin/openclaw-desktop-cred.sh
   for unit in openclaw-desktop-vnc openclaw-desktop-novnc openclaw-desktop-cred; do

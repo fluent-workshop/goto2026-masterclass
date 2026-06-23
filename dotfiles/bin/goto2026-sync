@@ -217,4 +217,44 @@ if [[ "$APPLY_SYSTEM" -eq 1 ]]; then
   log "systemd units reloaded (use systemctl restart <unit> to apply changes)"
 fi
 
+# ---------------------------------------------------------------------------
+# 5. Rebuild companion app client if its env is stale
+# ---------------------------------------------------------------------------
+# The Vite client embeds VITE_SUPABASE_ANON_KEY at build time. This key is
+# only known after `supabase start`, so it can't be baked — it must be
+# injected and the client rebuilt on each box. This step is idempotent: it
+# only rebuilds if the key in client/.env.local doesn't match the running
+# Supabase instance.
+
+COMPANION_DIR="$AGENT_HOME/src/goto2026-companion"
+
+if [[ -d "$COMPANION_DIR" ]]; then
+  # Pull latest companion code
+  log "Pulling goto2026-companion…"
+  apply_as_agent git -C "$COMPANION_DIR" pull --ff-only origin main 2>&1 | sed 's/^/  /' || true
+
+  # Get running Supabase anon key (non-fatal if Supabase not up yet)
+  SUPABASE_BIN="$(command -v supabase 2>/dev/null || echo '')"
+  if [[ -n "$SUPABASE_BIN" ]]; then
+    ANON_KEY=$(apply_as_agent bash -lc "cd $COMPANION_DIR && supabase status -o json 2>/dev/null | python3 -c \"import sys,json; print(json.load(sys.stdin).get('ANON_KEY',''))\"" 2>/dev/null || echo '')
+    CURRENT_KEY=$(grep -s VITE_SUPABASE_ANON_KEY "$COMPANION_DIR/client/.env.local" | cut -d= -f2 || echo '')
+
+    if [[ -n "$ANON_KEY" && "$ANON_KEY" != "$CURRENT_KEY" ]]; then
+      log "Updating client/.env.local with Supabase anon key…"
+      apply_as_agent bash -c "printf 'VITE_SUPABASE_URL=http://127.0.0.1:54321\\nVITE_SUPABASE_ANON_KEY=%s\\n' '$ANON_KEY' > $COMPANION_DIR/client/.env.local"
+      log "Rebuilding companion client…"
+      apply_as_agent bash -lc "cd $COMPANION_DIR/client && bun install --frozen-lockfile 2>/dev/null && bun run build" 2>&1 | tail -4 | sed 's/^/  /'
+      # Restart the dev server
+      apply_as_agent bash -lc "tmux kill-session -t companion 2>/dev/null || true; cd $COMPANION_DIR && tmux new-session -d -s companion 'bun run dev'"
+      log "  → companion client rebuilt and server restarted"
+    else
+      log "  companion client .env.local up to date — skipping rebuild"
+    fi
+  else
+    log "  supabase CLI not found — skipping companion client rebuild"
+  fi
+else
+  log "  (goto2026-companion not cloned — skipping)"
+fi
+
 log "Sync complete ✓"

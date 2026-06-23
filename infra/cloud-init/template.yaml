@@ -98,18 +98,19 @@ write_files:
           "mode": "local",
           "bind": "loopback",
           "trustedProxies": ["127.0.0.1", "::1"],
-          "controlUi": { "allowedOrigins": ["https://{{HOSTNAME}}-gt26-gateway-{{TUNNEL_HASH}}.fluentworkshop.dev"] }
+          "controlUi": { "allowedOrigins": ["https://{{HOSTNAME}}-gt26-gateway-{{TUNNEL_HASH}}.fluentworkshop.dev"], "dangerouslyDisableDeviceAuth": true }
         },
         "channels": {
           "discord": {
             "enabled": true,
             "token": "{{DISCORD_BOT_TOKEN}}",
-            "groupPolicy": "allowlist",
+            "groupPolicy": "open",
+            "allowBots": "mentions",
             "streaming": { "mode": "progress" },
             "guilds": {
               "1518545624751149207": {
                 "requireMention": false,
-                "users": ["932691257136910429"]
+                "users": []
               }
             }
           }
@@ -122,8 +123,8 @@ write_files:
               "timeoutSeconds": 1200,
               "models": [
                 {"id":"claude-haiku-4-5","name":"Claude Haiku 4.5","api":"anthropic-messages","contextWindow":200000,"maxTokens":64000,"input":["text","image"],"cost":{"input":1,"output":5,"cacheRead":0.1,"cacheWrite":1.25}},
-                {"id":"claude-sonnet-4-6","name":"Claude Sonnet 4.6","api":"anthropic-messages","contextWindow":1000000,"maxTokens":128000,"reasoning":true,"input":["text","image"],"cost":{"input":3,"output":15,"cacheRead":0.3,"cacheWrite":3.75}},
-                {"id":"claude-opus-4-8","name":"Claude Opus 4.8","api":"anthropic-messages","contextWindow":1000000,"maxTokens":128000,"reasoning":true,"input":["text","image"],"cost":{"input":5,"output":25,"cacheRead":0.5,"cacheWrite":6.25}}
+                {"id":"claude-sonnet-4-6","name":"Claude Sonnet 4.6","api":"anthropic-messages","contextWindow":1000000,"maxTokens":128000,"input":["text","image"],"cost":{"input":3,"output":15,"cacheRead":0.3,"cacheWrite":3.75}},
+                {"id":"claude-opus-4-8","name":"Claude Opus 4.8","api":"anthropic-messages","contextWindow":1000000,"maxTokens":128000,"input":["text","image"],"cost":{"input":5,"output":25,"cacheRead":0.5,"cacheWrite":6.25}}
               ]
             },
             "openai": {
@@ -141,7 +142,8 @@ write_files:
         },
         "agents": {
           "defaults": {
-            "model": { "primary": "anthropic/claude-sonnet-4-6", "fallbacks": ["anthropic/claude-haiku-4-5"] }
+            "model": { "primary": "anthropic/claude-sonnet-4-6", "fallbacks": ["anthropic/claude-haiku-4-5"] },
+            "thinking": { "mode": "none" }
           }
         },
         "tools": {
@@ -258,3 +260,7 @@ runcmd:
   # and config patch from /etc/openclaw/oc-bootstrap.json (dropped above).
   # Kick it explicitly so it runs even if the unit fires before cloud-final.
   - systemctl start openclaw-init.service || true
+  # Restart the tunnel so cloudflared re-runs openclaw-tunnel-config.sh with the
+  # freshly-cloned version (the script is updated by goto2026-sync / firstboot
+  # but the service may have already started with the baked-in version).
+  - systemctl restart openclaw-tunnel || true
