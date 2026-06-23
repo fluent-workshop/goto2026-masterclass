@@ -27,6 +27,16 @@
 # Per-instance differences (hostname, API keys) are NOT set here — cloud-init
 # handles those at clone time so the golden image stays generic.
 
+# ---- About this file's length -------------------------------------------
+# This script is intentionally longer than a production provisioning script
+# would be. Every phase is commented in detail — explaining not just WHAT each
+# step does but WHY, and documenting the tradeoffs made. This is a teaching
+# artifact: students read the source during the masterclass to understand how
+# a reproducible golden image is built. Brevity was sacrificed for clarity.
+# See HUMANS.md for a step-by-step walkthrough and AGENTS.md + the skill in
+# .claude/skills/infra/ if you're an AI agent running this yourself.
+# -------------------------------------------------------------------------
+
 set -euo pipefail
 
 # ---- Pin everything. A masterclass image must be reproducible. -------------
