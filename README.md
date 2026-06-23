@@ -1,51 +1,102 @@
 # GOTO 2026 Masterclass — Infrastructure
 
-Exercise environment for the GOTO 2026 OpenClaw masterclass: 14 named student VPS
-instances on Hetzner Cloud, each running a pre-baked OpenClaw agent.
+Exercise environment for the GOTO 2026 OpenClaw masterclass: 14 named GCP instances,
+each running a pre-baked OpenClaw agent.
 
-## Layout
+## Quick start
+
+To install OpenClaw on a single fresh Ubuntu 22.04 server, see **[HUMANS.md](HUMANS.md)**.
+For the AI agent playbook (Claude Code / Codex), see **[AGENTS.md](AGENTS.md)**.
+
+```bash
+git clone https://github.com/fluent-workshop/goto2026-masterclass.git
+cd goto2026-masterclass
+sudo bash dotfiles/bootstrap.sh
+```
+
+---
+
+## Repo layout
 
 ```
 .
-├── instances.txt              # Canonical roster (hostname = Pokémon name)
-├── dotfiles/                  # Linux agent environment (ported from macOS dotfiles)
-│   ├── bootstrap.sh           # Idempotent: installs openclaw + pinned deps
-│   └── shell/                 # zsh/env config baked into the image
+├── HUMANS.md                  # Step-by-step install guide for humans
+├── AGENTS.md                  # Claude Code / Codex quick reference
+├── instances.toml             # Roster of 14 boxes + per-box ElevenLabs voice IDs
+├── instance-secrets.toml      # Per-box secrets: tokens, passwords (gitignored)
+├── dotfiles/
+│   ├── bootstrap.sh           # 9-phase idempotent bake script (the main event)
+│   ├── mise.toml              # Pinned toolchain versions (Node, Bun, eza, starship)
+│   ├── shell/                 # zsh configs baked into the image
+│   ├── bin/                   # goto2026-sync and other on-box helpers
+│   ├── desktop/               # Xfce + TigerVNC + noVNC + nginx units and configs
+│   ├── firstboot/             # cloud-init first-boot service units
+│   └── tunnel/                # cloudflared config helper and systemd unit
 ├── infra/
-│   ├── cloud-init/            # Per-instance config (hostname + key injection)
-│   └── *.sh                   # Bake / clone / reset scripts
-└── docs/                      # Recipes, runbook
+│   ├── clone.sh               # Renders per-box cloud-init and creates GCP VMs
+│   ├── cloud-init/            # cloud-init template (per-box config at first boot)
+│   ├── services/              # SonarQube + Postgres compose stack
+│   ├── scripts/               # Cloudflare tunnel and DNS provisioning scripts
+│   └── terraform/             # GCP instance definitions
+├── .claude/
+│   ├── skills/cloudflare/     # Cloudflare tunnel and DNS automation
+│   └── skills/infra/          # Full fleet provisioning playbook for agents
+└── docs/                      # Onboarding notes and other references
 ```
 
-## The model: bake once, clone 14
+---
 
-1. **Bake** — run `dotfiles/bootstrap.sh` on one fresh Hetzner VPS → snapshot it.
-   The snapshot is the golden image. Byte-identical clones, not re-runs.
-   (Pinned: openclaw `2026.6.5` — Cedric's verified build.)
-2. **Clone** — spin 14 servers from the snapshot. Per-instance cloud-init sets the
-   hostname (the Pokémon name) and injects that box's API key.
-3. **Reset** — `infra/reset.sh` restores any wedged instance to clean state.
+## How it works
 
-Why not Ansible: this is a one-shot golden image with a 2-day lifespan, not a fleet
-managed over time. A snapshot is more reproducible than any re-run, and bash +
-cloud-init is followable by attendees who don't read Python/Jinja.
+**Bootstrap runs once to produce a golden image.** `dotfiles/bootstrap.sh` installs
+the full environment on a fresh Ubuntu 22.04 VM across 9 named phases: base packages,
+the mise toolchain (Node, Bun, OpenClaw), student tools (GitHub CLI, gcloud,
+claude-code, codex, Supabase CLI), VS Code (code-server), the Xfce browser desktop,
+local Whisper STT, cloudflared, Docker CE, and SonarQube. A GCP custom image is
+captured from the stopped VM when the bake completes.
+
+**Each student box is cloned from that image.** `infra/clone.sh` renders a
+per-box cloud-init config from `instance-secrets.toml` and creates a GCP VM from the
+golden image. On first boot, cloud-init sets the hostname, writes API keys to
+`/etc/openclaw/`, activates the cloudflared tunnel, and starts SonarQube. The golden
+image itself carries no secrets and no host-specific config.
+
+**Per-instance differences stay out of the image.** Hostname, API keys, the
+cloudflared tunnel token, the desktop password, and the ElevenLabs voice ID are all
+injected at first-boot time. This keeps the bake fast, reproducible, and auditable.
+
+---
 
 ## The roster
 
 Abra · Ditto · Dragonite · Gengar · Jolteon · Lapras · Machamp · Meowth · Onix ·
-Pikachu · Rapidash · Squirtle · Vaporeon · Vulpix
+Pikachu (instructor) · Rapidash · Squirtle · Vaporeon · Vulpix
 
-Hostname = the name, so support is "Snorlax is wedged" not an IP. (No Snorlax here —
-names were picked to be spellable under stress and free of negative connotations.)
+GCP project: `goto2026-masterclass-500200` · Zone: `us-central1-a`
 
-## Hard constraints (from prior research — don't relearn these)
+Hostname equals the Pokémon name, so support is "Lapras is wedged" not an IP.
 
-- **4GB RAM minimum** per VPS. The 2GB tier is unstable under skill load.
-- **Pre-provision, never cold-install in class.** Students boot into a ready agent.
-- Teach **`openclaw doctor --fix`** and message-queue mode explicitly — the recovery
-  tools when a student wedges their instance.
+---
+
+## Hard constraints
+
+**4 GB RAM minimum.** The 2 GB tier is unstable under skill load. All boxes use
+`n2-standard-8` (8 vCPU, 32 GB) for the masterclass.
+
+**Pre-provision, never cold-install in class.** Students boot into a ready agent.
+The bake-once model exists so that "does it work" is answered before anyone is
+in the room.
+
+**The golden image carries no secrets.** `phase_verify` asserts that
+`/etc/cloudflared/config.yml` does not exist at bake time. If it does, the bake fails.
+Per-box secrets live only in `instance-secrets.toml` (gitignored) and, at runtime,
+on the box itself under `/etc/openclaw/`.
+
+---
 
 ## Secrets
 
-Nothing sensitive lives in this repo. The Hetzner API token and per-instance keys
-live in 1Password (`EVIE - Hetzner GOTO 2026 API KEY`) and are injected at clone time.
+Nothing sensitive lives in this repo. Per-box secrets are in `instance-secrets.toml`
+(gitignored; copy from `instance-secrets.toml.example`). The Cloudflare API token
+lives in `~/.openclaw/credentials/cloudflare-api-key`. See
+`.claude/skills/infra/SKILL.md` for the full credentials reference.
